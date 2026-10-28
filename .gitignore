@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local data (database, uploads, generated reports)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+
+# Screenshots from E2E runs (kept in docs/screenshots when curated)
+frontend/e2e-output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.token-optimizer/
