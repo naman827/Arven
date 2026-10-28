@@ -70,7 +70,9 @@ async def test_redirect_to_private_address_is_blocked():
 
 @respx.mock
 async def test_disallowed_content_type_and_size_cap():
-    respx.get("https://93.184.216.34/bin").mock(return_value=httpx.Response(200, headers={"content-type": "application/octet-stream"}, content=b"x"))
+    respx.get("https://93.184.216.34/bin").mock(
+        return_value=httpx.Response(200, headers={"content-type": "application/octet-stream"}, content=b"x")
+    )
     respx.get("https://93.184.216.34/big").mock(
         return_value=httpx.Response(200, headers={"content-type": "text/html"}, content=b"a" * (4 * 1024 * 1024))
     )
@@ -134,10 +136,12 @@ async def test_no_search_provider_means_unavailable(settings):
 
 class _FakeTavilyClient:
     async def search(self, **kw):
-        return {"results": [
-            {"title": "A", "url": "https://www.a.com/p?utm_source=z", "content": "c", "score": 0.7, "published_date": "2026-01-02"},
-            {"title": "bad", "url": "javascript:alert(1)", "content": "x", "score": 0.9},
-        ]}
+        return {
+            "results": [
+                {"title": "A", "url": "https://www.a.com/p?utm_source=z", "content": "c", "score": 0.7, "published_date": "2026-01-02"},
+                {"title": "bad", "url": "javascript:alert(1)", "content": "x", "score": 0.9},
+            ]
+        }
 
     async def extract(self, **kw):
         return {"results": [{"url": kw["urls"][0], "raw_content": "text"}], "failed_results": [{"url": kw["urls"][1], "error": "blocked"}]}

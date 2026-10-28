@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -14,6 +14,21 @@ def new_id() -> str:
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """SQLite drops tzinfo; store UTC and re-attach it on load."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Any) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect: Any) -> datetime | None:
+        return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
 
 
 class Base(DeclarativeBase):
@@ -26,8 +41,8 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(200), default="New conversation")
     mode: Mapped[str] = mapped_column(String(20), default="chat")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, onupdate=utcnow)
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
@@ -47,7 +62,7 @@ class Message(Base):
     status: Mapped[str] = mapped_column(String(20), default="complete")
     research_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
@@ -63,8 +78,8 @@ class ResearchJob(Base):
     plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     options: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     report_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, onupdate=utcnow)
 
 
 class ResearchEvent(Base):
@@ -74,7 +89,7 @@ class ResearchEvent(Base):
     job_id: Mapped[str] = mapped_column(ForeignKey("research_jobs.id", ondelete="CASCADE"), index=True)
     type: Mapped[str] = mapped_column(String(30))
     data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
 class Source(Base):
@@ -88,7 +103,7 @@ class Source(Base):
     title: Mapped[str] = mapped_column(Text, default="")
     domain: Mapped[str] = mapped_column(String(255), default="")
     published_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    retrieved_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
     snippet: Mapped[str] = mapped_column(Text, default="")
     passages: Mapped[list[Any]] = mapped_column(JSON, default=list)
     subquestion: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -108,7 +123,7 @@ class Document(Base):
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     has_text: Mapped[bool] = mapped_column(default=True)
     status: Mapped[str] = mapped_column(String(20), default="ready")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(cascade="all, delete-orphan", order_by="DocumentChunk.index")
 
@@ -133,4 +148,4 @@ class Report(Base):
     markdown: Mapped[str] = mapped_column(Text)
     verification: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

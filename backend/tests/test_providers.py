@@ -210,25 +210,59 @@ async def test_structured_output_gives_up_after_one_repair():
 def test_classify_gemini_errors():
     rate = genai_errors.ClientError(
         429,
-        {"error": {"code": 429, "message": "Resource exhausted", "status": "RESOURCE_EXHAUSTED",
-                   "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "7s"}]}},
+        {
+            "error": {
+                "code": 429,
+                "message": "Resource exhausted",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "7s"}],
+            }
+        },
     )
     err = classify_gemini_error(rate)
     assert err.kind == ErrorKind.RATE_LIMIT and err.retry_after == 7.0
 
     daily = genai_errors.ClientError(
         429,
-        {"error": {"code": 429, "message": "You exceeded your current quota, please check your plan and billing details.",
-                   "status": "RESOURCE_EXHAUSTED", "details": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}},
+        {
+            "error": {
+                "code": 429,
+                "message": "You exceeded your current quota, please check your plan and billing details.",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}],
+            }
+        },
     )
     assert classify_gemini_error(daily).kind == ErrorKind.QUOTA
 
-    bad_key = genai_errors.ClientError(400, {"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"}})
+    bad_key = genai_errors.ClientError(
+        400, {"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"}}
+    )
     assert classify_gemini_error(bad_key).kind == ErrorKind.AUTH
-    assert classify_gemini_error(genai_errors.ClientError(403, {"error": {"code": 403, "message": "denied", "status": "PERMISSION_DENIED"}})).kind == ErrorKind.PERMISSION
-    assert classify_gemini_error(genai_errors.ClientError(404, {"error": {"code": 404, "message": "models/x is not found", "status": "NOT_FOUND"}})).kind == ErrorKind.MODEL_NOT_FOUND
-    assert classify_gemini_error(genai_errors.ServerError(503, {"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}})).kind == ErrorKind.SERVER
-    assert classify_gemini_error(genai_errors.ClientError(400, {"error": {"code": 400, "message": "bad field", "status": "INVALID_ARGUMENT"}})).kind == ErrorKind.BAD_REQUEST
+    assert (
+        classify_gemini_error(
+            genai_errors.ClientError(403, {"error": {"code": 403, "message": "denied", "status": "PERMISSION_DENIED"}})
+        ).kind
+        == ErrorKind.PERMISSION
+    )
+    assert (
+        classify_gemini_error(
+            genai_errors.ClientError(404, {"error": {"code": 404, "message": "models/x is not found", "status": "NOT_FOUND"}})
+        ).kind
+        == ErrorKind.MODEL_NOT_FOUND
+    )
+    assert (
+        classify_gemini_error(
+            genai_errors.ServerError(503, {"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}})
+        ).kind
+        == ErrorKind.SERVER
+    )
+    assert (
+        classify_gemini_error(
+            genai_errors.ClientError(400, {"error": {"code": 400, "message": "bad field", "status": "INVALID_ARGUMENT"}})
+        ).kind
+        == ErrorKind.BAD_REQUEST
+    )
     assert classify_gemini_error(httpx.ConnectTimeout("t")).kind == ErrorKind.TIMEOUT
     assert classify_gemini_error(httpx.ConnectError("c")).kind == ErrorKind.NETWORK
 
@@ -236,8 +270,13 @@ def test_classify_gemini_errors():
 def _openai_status(code: int, headers: dict[str, str] | None = None, message: str = "err") -> openai.APIStatusError:
     request = httpx.Request("POST", "https://integrate.api.nvidia.com/v1/chat/completions")
     response = httpx.Response(code, headers=headers or {}, request=request)
-    cls = {401: openai.AuthenticationError, 403: openai.PermissionDeniedError, 404: openai.NotFoundError,
-           429: openai.RateLimitError, 400: openai.BadRequestError}.get(code, openai.InternalServerError)
+    cls = {
+        401: openai.AuthenticationError,
+        403: openai.PermissionDeniedError,
+        404: openai.NotFoundError,
+        429: openai.RateLimitError,
+        400: openai.BadRequestError,
+    }.get(code, openai.InternalServerError)
     return cls(message, response=response, body=None)
 
 

@@ -154,9 +154,7 @@ def research_handler(messages: list[ChatMessage], json_mode: bool) -> str:
         )
     if "verify citations" in system:
         ids = [(int(m.group(1)), m.group(2)) for m in re.finditer(r"Claim (\d+): (.+)", user)]
-        return json.dumps(
-            {"results": [{"id": i, "verdict": "unsupported" if "UNSUPPORTED" in text else "supported"} for i, text in ids]}
-        )
+        return json.dumps({"results": [{"id": i, "verdict": "unsupported" if "UNSUPPORTED" in text else "supported"} for i, text in ids]})
     if "writing step" in system:
         return (
             "# Solar Energy Adoption\n\n## Executive summary\n\nSolar panels convert sunlight to electricity [1]. "
@@ -227,7 +225,9 @@ def allow_all_urls(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def build_services(settings: Settings) -> Callable[..., Services]:
     def _build(router: ProviderRouter, search_providers: list[SearchProvider] | None = None) -> Services:
-        search = SearchService(search_providers or [], settings, http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(403))))
+        search = SearchService(
+            search_providers or [], settings, http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(403)))
+        )
         jobs = JobManager()
         services = Services(settings, router, search, jobs, DeepResearchOrchestrator(router, search, jobs, settings))
         set_services(services)

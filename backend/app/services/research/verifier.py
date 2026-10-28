@@ -52,7 +52,8 @@ def _numbers(text: str) -> list[int]:
 
 async def verify_report(router: ProviderRouter, markdown: str, registry: SourceRegistry, budget: Budget) -> VerificationResult:
     valid = {r.number for r in registry.readable()}
-    markdown, invalid_removed = strip_invalid_citations(markdown, valid)
+    invalid_removed = 0
+    uncited_removed = 0  # sentences whose every citation pointed at a non-existent source
 
     lines = markdown.split("\n")
     structure: list[list[str] | None] = []  # None = line kept verbatim
@@ -60,6 +61,9 @@ async def verify_report(router: ProviderRouter, markdown: str, registry: SourceR
     claims: list[Claim] = []
     for li, line in enumerate(lines):
         if line.lstrip().startswith("#") or not CITATION_RE.search(line):
+            if CITATION_RE.search(line):
+                lines[li], dropped = strip_invalid_citations(line, valid)
+                invalid_removed += dropped
             structure.append(None)
             prefixes.append("")
             continue
@@ -73,8 +77,17 @@ async def verify_report(router: ProviderRouter, markdown: str, registry: SourceR
         prefixes.append(prefix)
         for si, sentence in enumerate(sentences):
             nums = _numbers(sentence)
-            if nums:
-                claims.append(Claim(len(claims) + 1, li, si, sentence.strip(), nums))
+            if not nums:
+                continue
+            cleaned, dropped = strip_invalid_citations(sentence, valid)
+            invalid_removed += dropped
+            if not any(n in valid for n in nums):
+                is_row = line.lstrip().startswith("|")
+                sentences[si] = cleaned.rstrip() + " (unverified)" if is_row else ""
+                uncited_removed += 1
+                continue
+            sentences[si] = cleaned
+            claims.append(Claim(len(claims) + 1, li, si, cleaned.strip(), [n for n in nums if n in valid]))
 
     to_check = claims[: budget.max_claims_to_verify]
     batches = [to_check[i : i + budget.verify_batch_size] for i in range(0, len(to_check), budget.verify_batch_size)]
@@ -136,11 +149,11 @@ async def verify_report(router: ProviderRouter, markdown: str, registry: SourceR
     checked = [c for c in to_check if c.verdict is not None]
     summary = {
         "ran": True,
-        "claims_total": len(claims),
+        "claims_total": len(claims) + uncited_removed,
         "claims_checked": len(checked),
         "supported": sum(1 for c in checked if c.verdict == "supported"),
         "partial": sum(1 for c in checked if c.verdict == "partial"),
-        "removed": removed,
+        "removed": removed + uncited_removed,
         "not_checked": len(claims) - len(checked),
         "invalid_citations_removed": invalid_removed,
         "failed_batches": failed_batches,

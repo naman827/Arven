@@ -64,7 +64,8 @@ async def test_full_deep_research_flow(db, make_router, build_services, allow_al
     for n in set(cited_numbers(body)):
         assert stored[n].url in refs
     v = report.verification
-    assert v["ran"] and v["removed"] == 1 and v["invalid_citations_removed"] == 1 and v["claims_checked"] >= 2
+    assert v["ran"] and v["removed"] == 2 and v["invalid_citations_removed"] == 1 and v["claims_checked"] >= 2
+    assert "fabricated claim" not in md, "a sentence citing only non-existent sources is removed"
     assert any(m.meta.get("report_id") == report.id for m in msgs)
     # distinct queries were generated per subquestion (not rewordings of one query)
     assert len(set(search.queries)) >= 6
@@ -86,7 +87,9 @@ async def test_budget_caps_sources_and_rounds(db, make_router, build_services, a
 def _gap_handler(messages, json_mode):
     system = messages[0].content
     if "analysis step" in system:
-        return json.dumps({"findings": [], "coverage": 0.1, "gaps": ["missing data"], "conflicts": [], "follow_up_queries": ["targeted follow up"]})
+        return json.dumps(
+            {"findings": [], "coverage": 0.1, "gaps": ["missing data"], "conflicts": [], "follow_up_queries": ["targeted follow up"]}
+        )
     return research_handler(messages, json_mode)
 
 
@@ -190,7 +193,7 @@ async def test_event_replay_after_last_event_id(db, make_router, build_services,
 
 def test_strip_invalid_citations():
     text, removed = strip_invalid_citations("A [1]. B [2, 7]. C [9].", {1, 2})
-    assert text == "A [1]. B [2]. C ." and removed == 2
+    assert text == "A [1]. B [2]. C." and removed == 2
 
 
 def test_split_sentences_keeps_trailing_citations():
@@ -201,7 +204,9 @@ async def test_verifier_removes_only_unsupported(make_router):
     registry = SourceRegistry(5)
     for i in (1, 2):
         url = f"https://s{i}.org/"
-        rec = registry.add(SearchResult(title=f"S{i}", url=url, canonical_url=canonicalize_url(url), domain=f"s{i}.org", snippet="", readable=True), None)
+        rec = registry.add(
+            SearchResult(title=f"S{i}", url=url, canonical_url=canonicalize_url(url), domain=f"s{i}.org", snippet="", readable=True), None
+        )
         rec.passages = ["Solar panels convert sunlight to electricity."]
 
     def handler(messages: list[ChatMessage], json_mode: bool) -> str:

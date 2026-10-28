@@ -97,7 +97,7 @@ def references_section(markdown: str, registry: SourceRegistry) -> str:
         res = r.result
         date = f" Published {res.published_date}." if res.published_date else ""
         kind = f" ({r.source_type})" if r.source_type != "web" else ""
-        lines.append(f"{n}. {res.title}{kind}. {res.domain}.{date} Retrieved {res.retrieved_at:%Y-%m-%d}. <{res.url}>")
+        lines.append(f"{n}. {res.title}{kind}. {res.domain}.{date} Retrieved {res.retrieved_at.astimezone():%Y-%m-%d}. <{res.url}>")
     if len(lines) == 2:
         lines.append("No sources were cited.")
     return "\n".join(lines)

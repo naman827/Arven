@@ -142,9 +142,12 @@ def strip_invalid_citations(text: str, valid: set[int]) -> tuple[str, int]:
 
     def repl(m: re.Match[str]) -> str:
         nonlocal removed
-        nums = [int(n) for n in m.group(1).split(",")]
+        nums = [int(n) for n in m.group(2).split(",")]
         keep = [n for n in nums if n in valid]
         removed += len(nums) - len(keep)
-        return "".join(f"[{n}]" for n in keep)
+        return (m.group(1) + "".join(f"[{n}]" for n in keep)) if keep else ""
 
-    return CITATION_RE.sub(repl, text), removed
+    return _CITATION_WS_RE.sub(repl, text), removed
+
+
+_CITATION_WS_RE = re.compile(r"([ 	]*)\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]")
