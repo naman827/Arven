@@ -1,4 +1,52 @@
-// Typed client for the ARVEN AI backend. All requests go through the Vite /api proxy (same origin).
+// Typed client for the ARVEN AI backend. Locally, requests go through the Vite /api proxy (same origin).
+// A deployed frontend sets VITE_API_BASE to the backend's URL and authenticates with an access token.
+
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '')
+const TOKEN_KEY = 'arven-token'
+export const UNAUTHORIZED_EVENT = 'arven:unauthorized'
+
+export function getToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setToken(token: string) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    /* storage unavailable: the user will be asked to log in again */
+  }
+}
+
+function withAuth(init?: RequestInit): RequestInit {
+  const token = getToken()
+  if (!token) return init ?? {}
+  const headers = new Headers(init?.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  return { ...init, headers }
+}
+
+/** URL for GET endpoints that cannot send headers (EventSource, download links). */
+export function authUrl(path: string): string {
+  const token = getToken()
+  const sep = path.includes('?') ? '&' : '?'
+  return `${API_BASE}${path}${token ? `${sep}access_token=${encodeURIComponent(token)}` : ''}`
+}
+
+const UNREACHABLE = API_BASE
+  ? 'Cannot reach the ARVEN AI backend. It may be waking up; try again in a minute.'
+  : 'Cannot reach the ARVEN AI backend. Is it running on 127.0.0.1:8000?'
+
+function onUnauthorized(status: number) {
+  if (status === 401) {
+    setToken('')
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+  }
+}
 
 export type Mode = 'chat' | 'research' | 'deep_research'
 
@@ -141,11 +189,12 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
-    res = await fetch(path, init)
+    res = await fetch(`${API_BASE}${path}`, withAuth(init))
   } catch {
-    throw new ApiError(0, 'Cannot reach the ARVEN AI backend. Is it running on 127.0.0.1:8000?')
+    throw new ApiError(0, UNREACHABLE)
   }
   if (!res.ok) {
+    onUnauthorized(res.status)
     let detail = res.statusText
     try {
       const body = await res.json()
@@ -186,7 +235,7 @@ export const api = {
 
   listReports: () => request<ReportSummary[]>('/api/reports'),
   getReport: (id: string) => request<Report>(`/api/reports/${id}`),
-  reportPdfUrl: (id: string) => `/api/reports/${id}/pdf`,
+  reportPdfUrl: (id: string) => authUrl(`/api/reports/${id}/pdf`),
 
   listDocuments: () => request<DocumentInfo[]>('/api/documents'),
   uploadDocument: (file: File) => {
@@ -195,6 +244,9 @@ export const api = {
     return request<DocumentInfo>('/api/documents', { method: 'POST', body: form })
   },
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: 'DELETE' }),
+
+  authStatus: () => request<{ required: boolean; authenticated: boolean }>('/api/auth/status'),
+  login: (password: string) => request<{ token: string; expires_in: number }>('/api/auth/login', json({ password })),
 
   status: () => request<SystemStatus>('/api/settings/status'),
   testConnection: (name: string) =>
@@ -256,12 +308,13 @@ export async function streamChat(
 ): Promise<AsyncGenerator<StreamEvent>> {
   let res: Response
   try {
-    res = await fetch('/api/chat', { ...json(body), signal })
+    res = await fetch(`${API_BASE}/api/chat`, withAuth({ ...json(body), signal }))
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err
-    throw new ApiError(0, 'Cannot reach the ARVEN AI backend. Is it running on 127.0.0.1:8000?')
+    throw new ApiError(0, UNREACHABLE)
   }
   if (!res.ok || !res.body) {
+    onUnauthorized(res.status)
     let detail = res.statusText
     try {
       detail = (await res.json()).detail ?? detail

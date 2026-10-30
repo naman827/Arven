@@ -1,0 +1,17 @@
+# Netlify hosts the static frontend only. The FastAPI backend runs on Render (see render.yaml).
+# Set VITE_API_BASE in Netlify (Site configuration > Environment variables) to the backend URL,
+# for example https://arven-api.onrender.com
+[build]
+  base = "frontend"
+  publish = "dist"
+  command = "if [ -z \"$VITE_API_BASE\" ]; then echo 'VITE_API_BASE is not set. Add it in Netlify environment variables.'; exit 1; fi; npm run build"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"

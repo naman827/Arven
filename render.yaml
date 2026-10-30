@@ -1,0 +1,35 @@
+# Render Blueprint for the ARVEN AI backend (FastAPI). Values marked sync: false are entered in the
+# Render dashboard when the Blueprint is created; they are never stored in this repository.
+services:
+  - type: web
+    name: arven-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: BACKEND_HOST
+        value: 0.0.0.0
+      # Public server behind ACCESS_PASSWORD: any Host header is fine (DNS-rebinding protection is for localhost).
+      - key: ALLOWED_HOSTS
+        value: "*"
+      # Required. The app refuses to start on 0.0.0.0 without it.
+      - key: ACCESS_PASSWORD
+        sync: false
+      # Your Netlify site URL, e.g. https://arven-ai.netlify.app (no trailing slash)
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3-flash-preview
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_MODEL
+        value: nvidia/nemotron-3.5-super-vl-120b-a12b
+      - key: TAVILY_API_KEY
+        sync: false

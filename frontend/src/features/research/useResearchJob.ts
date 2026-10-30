@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react'
 
-import type { Plan, SourceInfo, Verification } from '@/lib/api'
+import { authUrl, type Plan, type SourceInfo, type Verification } from '@/lib/api'
 
 export interface JobState {
   status: string
@@ -90,7 +90,7 @@ export function useResearchJob(jobId: string | null, onFinished?: () => void) {
   useEffect(() => {
     dispatch({ type: '__reset' })
     if (!jobId) return
-    const es = new EventSource(`/api/research/${jobId}/events`)
+    const es = new EventSource(authUrl(`/api/research/${jobId}/events`))
     let finished = false
     const finish = () => {
       if (finished) return

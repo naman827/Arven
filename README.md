@@ -129,6 +129,8 @@ All settings live in `.env` (see `.env.example` for comments).
 | `DATABASE_URL` | `sqlite:///./data/arven_ai.db` | Relative to repo root |
 | `BACKEND_HOST` / `BACKEND_PORT` | `127.0.0.1` / `8000` | Non-local hosts are refused |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS allowlist (127.0.0.1 variant added automatically) |
+| `ALLOWED_HOSTS` | `127.0.0.1,localhost` | Host headers the API accepts (DNS-rebinding protection) |
+| `ACCESS_PASSWORD` | empty | Login password; required when deployed, empty means no login |
 | `MAX_SEARCH_ROUNDS` | `2` | Deep research rounds |
 | `MAX_UNIQUE_SOURCES` | `20` | Source cap per job |
 | `MAX_CONCURRENT_REQUESTS` | `4` | Parallel fetches |
@@ -153,6 +155,25 @@ The frontend dev server proxies `/api` to `http://127.0.0.1:8000`. Override with
 - **Scanned PDFs**: uploaded but marked "no text layer" and not used as context. OCR is not supported.
 - **Deep research job shows "interrupted"**: the backend restarted while it was running. Jobs do not survive restarts; start it again.
 - **Port in use**: change `BACKEND_PORT` (and `ARVEN_BACKEND_URL` for the frontend), or stop the other process.
+
+## Deploy (Netlify + Render)
+
+Netlify serves the static frontend. The FastAPI backend needs a long-running Python server (Deep Research streams for minutes), so it runs on Render. A deployed backend requires `ACCESS_PASSWORD`; the app shows a login screen and refuses to start on a public address without it.
+
+1. **Backend on Render.** In Render: New > Blueprint > pick this GitHub repo. Render reads `render.yaml` and asks for:
+   - `ACCESS_PASSWORD`: a long password you choose
+   - `FRONTEND_ORIGIN`: your Netlify URL (fill in after step 2, then redeploy), e.g. `https://arven-ai.netlify.app`
+   - `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `TAVILY_API_KEY`
+
+   Note the service URL, e.g. `https://arven-api.onrender.com`. Check `https://<service>/api/health` returns `{"status":"ok"}`.
+2. **Frontend on Netlify.** In Netlify: Add new project > Import from GitHub > pick this repo. `netlify.toml` sets the build. Before deploying, add the environment variable `VITE_API_BASE` = the Render URL (no trailing slash).
+3. Set `FRONTEND_ORIGIN` on Render to the Netlify URL and redeploy the backend.
+4. Open the Netlify URL and unlock with `ACCESS_PASSWORD`.
+
+Notes:
+- Keys live only in Render's environment settings, never in the frontend build.
+- On Render's free plan the service sleeps when idle (the first request takes a while) and the disk is not persistent, so chat history, uploads and reports are lost on restart or redeploy. To keep them, use a paid instance with a persistent disk and point `DATA_DIR` and `DATABASE_URL` (absolute `sqlite:////path/arven_ai.db`) at it.
+- Changing `ACCESS_PASSWORD` signs out every browser.
 
 ## Project layout
 
@@ -189,4 +210,4 @@ data/                SQLite DB, uploads (gitignored)
 - No OCR for scanned PDFs.
 - DuckDuckGo fallback is unofficial and best-effort.
 - Running deep research jobs do not survive a backend restart.
-- Single user, local only. No authentication.
+- Single user. Locally there is no login; deployed instances use one shared `ACCESS_PASSWORD`.

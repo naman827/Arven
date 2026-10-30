@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import chat, conversations, documents, reports, research, settings
+from app.api import auth, chat, conversations, documents, reports, research, settings
 from app.config import get_settings
 from app.db.session import dispose_engine, init_db, mark_interrupted_jobs
 from app.logging import setup_logging
@@ -48,15 +48,17 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     cfg = get_settings()
     app = FastAPI(title="ARVEN AI", version="1.0.0", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
-    origins = {cfg.frontend_origin, cfg.frontend_origin.replace("localhost", "127.0.0.1")}
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=sorted(origins),
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "Last-Event-ID"],
-    )
-
+    base_origin = cfg.frontend_origin.rstrip("/")
+    origins = {base_origin, base_origin.replace("localhost", "127.0.0.1"), base_origin.replace("127.0.0.1", "localhost")}
     max_body = (cfg.max_upload_mb + 1) * 1024 * 1024
+
+    # Middleware added later wraps earlier ones; CORS is added after these so their error
+    # responses still carry CORS headers and the browser can read them.
+    @app.middleware("http")
+    async def require_access(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not auth.is_authorized(request, cfg):
+            return JSONResponse({"detail": "Login required"}, status_code=401)
+        return await call_next(request)
 
     @app.middleware("http")
     async def check_origin(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -74,12 +76,19 @@ def create_app() -> FastAPI:
             return JSONResponse({"detail": "Request too large"}, status_code=413)
         return await call_next(request)
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(origins),
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "Last-Event-ID", "Authorization"],
+    )
+
     @app.exception_handler(Exception)
     async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
         log.error("unhandled error: %s", type(exc).__name__, exc_info=exc)
         return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
-    for module in (chat, conversations, research, documents, reports, settings):
+    for module in (auth, chat, conversations, research, documents, reports, settings):
         app.include_router(module.router)
     # Added last so it runs first: reject any Host header that is not ours (DNS rebinding).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[h.strip() for h in cfg.allowed_hosts.split(",") if h.strip()])

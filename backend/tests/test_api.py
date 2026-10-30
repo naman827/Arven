@@ -1,5 +1,6 @@
 """API contract tests: chat/research streaming, history, documents, reports/PDF, settings, SSE resume."""
 
+import asyncio
 import json
 
 import httpx
@@ -218,3 +219,39 @@ async def test_rejects_foreign_host_and_origin(client, make_router, build_servic
     assert r.status_code == 403
     r = await client.get("/api/health")
     assert r.status_code == 200
+
+
+async def test_access_password_gates_api(monkeypatch, db, make_router, build_services):
+    from app.api import auth
+    from app.config import get_settings
+
+    monkeypatch.setenv("ACCESS_PASSWORD", "correct horse")
+    get_settings.cache_clear()
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(auth.asyncio, "sleep", lambda _s: real_sleep(0))
+    auth._failures.clear()
+    build_services(make_router(FakeProvider("gemini"), FakeProvider("nvidia")))
+    app = create_app()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.get("/api/health")).status_code == 200
+        assert (await c.get("/api/conversations")).status_code == 401
+        assert (await c.get("/api/auth/status")).json() == {"required": True, "authenticated": False}
+        assert (await c.post("/api/auth/login", json={"password": "wrong"})).status_code == 401
+        token = (await c.post("/api/auth/login", json={"password": "correct horse"})).json()["token"]
+        h = {"Authorization": f"Bearer {token}"}
+        assert (await c.get("/api/conversations", headers=h)).status_code == 200
+        assert (await c.get(f"/api/conversations?access_token={token}")).status_code == 200
+        # query tokens are only accepted on GET
+        assert (await c.delete(f"/api/conversations/x?access_token={token}")).status_code == 401
+        assert (await c.get("/api/conversations", headers={"Authorization": "Bearer 1.bad"})).status_code == 401
+        assert (await c.get("/api/auth/status", headers=h)).json()["authenticated"] is True
+    get_settings.cache_clear()
+
+
+def test_tokens_expire_and_rotate_with_password():
+    from app.api.auth import TOKEN_TTL_SECONDS, issue_token, token_valid
+
+    t = issue_token("pw", now=1000)
+    assert token_valid(t, "pw", now=1001)
+    assert not token_valid(t, "pw", now=1000 + TOKEN_TTL_SECONDS + 1)
+    assert not token_valid(t, "other", now=1001)
