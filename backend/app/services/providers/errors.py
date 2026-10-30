@@ -27,6 +27,8 @@ FALLBACK_OK = RETRYABLE | {
     ErrorKind.MODEL_NOT_FOUND,
     ErrorKind.NOT_CONFIGURED,
     ErrorKind.UNKNOWN,
+    # Empty or unparseable output from one model is often fine from the other (it is not retried on the same one).
+    ErrorKind.INVALID_OUTPUT,
 }
 
 USER_MESSAGES = {

@@ -1,17 +1,32 @@
-"""DuckDuckGo fallback via the `ddgs` library. Best effort: unofficial, rate-limited, less reliable."""
+"""Free search fallback via the `ddgs` library (DuckDuckGo plus other engines). Best effort: unofficial, rate-limited."""
 
 import asyncio
+import time
 from collections.abc import Callable
 from typing import Any
 
 from app.services.search.base import SearchError, SearchProvider, SearchResult
 from app.services.search.url_safety import canonicalize_url, domain_of
 
+# The DuckDuckGo engine alone often answers "No results found." when it rate-limits a client. ddgs can query
+# other engines too; a second pass in a different order recovers most remaining failures.
+_ENGINE_ORDERS = ("duckduckgo,yahoo,brave,mojeek", "yahoo,mojeek,brave,duckduckgo")
+_RETRY_DELAY_SECONDS = 1.5
+
 
 def _default_search(query: str, max_results: int) -> list[dict[str, Any]]:
     from ddgs import DDGS
 
-    return DDGS(timeout=10).text(query, max_results=max_results, backend="duckduckgo")
+    last: Exception | None = None
+    for attempt, engines in enumerate(_ENGINE_ORDERS):
+        if attempt:
+            time.sleep(_RETRY_DELAY_SECONDS)
+        try:
+            return DDGS(timeout=10).text(query, max_results=max_results, backend=engines)
+        except Exception as exc:  # ddgs raises DDGSException / TimeoutException / RatelimitException
+            last = exc
+    assert last is not None
+    raise last
 
 
 class DuckDuckGoSearchProvider(SearchProvider):
@@ -31,7 +46,7 @@ class DuckDuckGoSearchProvider(SearchProvider):
             raise SearchError(self.name, "DuckDuckGo fallback is disabled.", kind="auth")
         async with self._lock:
             try:
-                rows = await asyncio.wait_for(asyncio.to_thread(self._search_fn, query[:300], max_results), timeout=20)
+                rows = await asyncio.wait_for(asyncio.to_thread(self._search_fn, query[:300], max_results), timeout=30)
             except Exception as exc:
                 kind = "rate_limit" if "ratelimit" in type(exc).__name__.lower() else "network"
                 raise SearchError(self.name, f"DuckDuckGo search failed ({type(exc).__name__}).", kind=kind) from exc

@@ -104,6 +104,7 @@ class NvidiaProvider(ModelProvider):
         self._settings = settings
         self._key = secret(settings.nvidia_api_key)
         self._client = client
+        self._thinking_option_supported = True
 
     @property
     def configured(self) -> bool:
@@ -129,6 +130,23 @@ class NvidiaProvider(ModelProvider):
     def _convert(messages: list[ChatMessage]) -> list[dict[str, str]]:
         return [{"role": m.role, "content": m.content} for m in messages]
 
+    def _thinking_args(self) -> dict[str, Any]:
+        # Thinking models (e.g. Nemotron) otherwise spend thousands of hidden reasoning tokens first; on long
+        # report prompts that can use the whole max_tokens budget and return an empty answer.
+        if self._settings.nvidia_thinking or not self._thinking_option_supported:
+            return {}
+        return {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
+
+    async def _create(self, client: Any, **kwargs: Any) -> Any:
+        try:
+            return await client.chat.completions.create(**kwargs, **self._thinking_args())
+        except openai.BadRequestError:
+            if not self._thinking_args():
+                raise
+            # A model that rejects the option: stop sending it and retry once.
+            self._thinking_option_supported = False
+            return await client.chat.completions.create(**kwargs)
+
     async def generate(
         self, messages: list[ChatMessage], *, temperature: float = 0.3, max_tokens: int | None = None, json_mode: bool = False
     ) -> str:
@@ -136,7 +154,7 @@ class NvidiaProvider(ModelProvider):
         kwargs: dict[str, Any] = {"model": self.model, "messages": self._convert(messages), "temperature": temperature}
         kwargs["max_tokens"] = max_tokens or 4096
         try:
-            response = await client.chat.completions.create(**kwargs)
+            response = await self._create(client, **kwargs)
         except Exception as exc:
             raise classify_openai_error(exc) from exc
         text = strip_reasoning((response.choices[0].message.content or "") if response.choices else "")
@@ -147,7 +165,8 @@ class NvidiaProvider(ModelProvider):
     async def stream(self, messages: list[ChatMessage], *, temperature: float = 0.3, max_tokens: int | None = None) -> AsyncIterator[str]:
         client = self._get_client()
         try:
-            response = await client.chat.completions.create(
+            response = await self._create(
+                client,
                 model=self.model,
                 messages=self._convert(messages),
                 temperature=temperature,

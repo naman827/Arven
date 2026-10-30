@@ -1,5 +1,5 @@
 import { Menu as MenuIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { Logo, Sidebar } from '@/components/Sidebar'
 import { Button } from '@/components/ui/button'
@@ -9,10 +9,13 @@ import { AppProvider } from '@/hooks/useApp'
 import { useRoute } from '@/hooks/useRoute'
 import { useTheme } from '@/hooks/useTheme'
 import { ChatView } from '@/features/chat/ChatView'
-import { DocumentsView } from '@/features/documents/DocumentsView'
-import { ReportsList, ReportView } from '@/features/reports/ReportView'
-import { SettingsView } from '@/features/settings/SettingsView'
 import { cn } from '@/lib/utils'
+
+// Less-used pages load on demand to keep the initial bundle small.
+const ReportsList = lazy(() => import('@/features/reports/ReportView').then((m) => ({ default: m.ReportsList })))
+const ReportView = lazy(() => import('@/features/reports/ReportView').then((m) => ({ default: m.ReportView })))
+const DocumentsView = lazy(() => import('@/features/documents/DocumentsView').then((m) => ({ default: m.DocumentsView })))
+const SettingsView = lazy(() => import('@/features/settings/SettingsView').then((m) => ({ default: m.SettingsView })))
 
 const isWide = () => window.innerWidth >= 1024
 
@@ -58,10 +61,12 @@ export default function App() {
               </header>
               <main id="main" className="min-h-0 flex-1">
                 {route.view === 'home' || route.view === 'chat' ? <ChatView conversationId={chatId} /> : null}
-                {route.view === 'reports' ? <ReportsList /> : null}
-                {route.view === 'report' ? <ReportView id={route.id} /> : null}
-                {route.view === 'documents' ? <DocumentsView /> : null}
-                {route.view === 'settings' ? <SettingsView /> : null}
+                <Suspense fallback={null}>
+                  {route.view === 'reports' ? <ReportsList /> : null}
+                  {route.view === 'report' ? <ReportView id={route.id} /> : null}
+                  {route.view === 'documents' ? <DocumentsView /> : null}
+                  {route.view === 'settings' ? <SettingsView /> : null}
+                </Suspense>
               </main>
             </div>
           </div>

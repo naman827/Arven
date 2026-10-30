@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import secrets
 import time
-from collections import deque
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -21,10 +20,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 TOKEN_TTL_SECONDS = 7 * 24 * 3600
 MIN_PASSWORD_LENGTH = 12
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/status"}
-# One global budget of failed logins. Client addresses behind a hosting proxy cannot be trusted
-# (X-Forwarded-For is client-controlled), so failures are not tracked per client.
-_MAX_FAILURES, _FAILURE_WINDOW = 20, 600.0
-_failures: deque[float] = deque()
+# Failed logins are answered one at a time, each after a delay, so guessing is capped at about one try per
+# second across all clients. Client addresses behind a hosting proxy are spoofable (X-Forwarded-For), so this
+# is global; and since the correct password is checked first, an attacker cannot lock the owner out.
+FAILURE_DELAY_SECONDS = 1.0
+_failure_lock = asyncio.Lock()
 # Fallback when SESSION_SECRET is not set: tokens then stop working when the process restarts.
 _PROCESS_SECRET = secrets.token_bytes(32)
 
@@ -80,13 +80,9 @@ async def login(body: LoginIn) -> dict[str, str | int]:
     password = secret(get_settings().access_password)
     if not password:
         return {"token": "", "expires_in": 0}
-    now = time.monotonic()
-    while _failures and now - _failures[0] > _FAILURE_WINDOW:
-        _failures.popleft()
-    if len(_failures) >= _MAX_FAILURES:
-        raise HTTPException(429, "Too many failed attempts. Try again in a few minutes.")
-    if not hmac.compare_digest(body.password.encode(), password.encode()):
-        _failures.append(now)
-        await asyncio.sleep(1)  # slows down guessing
-        raise HTTPException(401, "Wrong password")
-    return {"token": issue_token(password), "expires_in": TOKEN_TTL_SECONDS}
+    if hmac.compare_digest(body.password.encode(), password.encode()):
+        return {"token": issue_token(password), "expires_in": TOKEN_TTL_SECONDS}
+    async with _failure_lock:
+        await asyncio.sleep(FAILURE_DELAY_SECONDS)
+    raise HTTPException(401, "Wrong password")
+

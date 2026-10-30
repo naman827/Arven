@@ -28,7 +28,7 @@
     {
       "name": "deploy-sim-backend",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd backend && set ACCESS_PASSWORD=local-sim-pass&& set FRONTEND_ORIGIN=http://127.0.0.1:5180&& set ALLOWED_HOSTS=*&& set PORT=8010&& .venv\\Scripts\\python.exe -m app"],
+      "runtimeArgs": ["/c", "cd backend && set ACCESS_PASSWORD=local-sim-pass&& set DATA_DIR=..\\data\\sim&& set DATABASE_URL=sqlite:///./data/sim/arven_ai.db&& set FRONTEND_ORIGIN=http://127.0.0.1:5180&& set ALLOWED_HOSTS=*&& set PORT=8010&& .venv\\Scripts\\python.exe -m app"],
       "port": 8010
     },
     {

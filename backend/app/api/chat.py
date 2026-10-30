@@ -54,6 +54,10 @@ async def _prepare(req: ChatRequest) -> tuple[str, str, str, list[tuple[str, str
             if not question:
                 raise HTTPException(422, "Message is empty")
             document_ids = req.document_ids
+            # Reject unknown attachments up front instead of answering without them (nothing is committed yet).
+            for doc_id in document_ids[:5]:
+                if await session.get(Document, doc_id) is None:
+                    raise HTTPException(404, "Attached document not found. It may have been deleted.")
             user_msg = Message(conversation_id=conv.id, role="user", content=question, mode=req.mode, meta={"document_ids": document_ids})
             session.add(user_msg)
             prior = messages

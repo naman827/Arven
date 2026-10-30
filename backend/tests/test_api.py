@@ -229,9 +229,7 @@ async def test_access_password_gates_api(monkeypatch, db, make_router, build_ser
 
     monkeypatch.setenv("ACCESS_PASSWORD", "correct horse")
     get_settings.cache_clear()
-    real_sleep = asyncio.sleep
-    monkeypatch.setattr(auth.asyncio, "sleep", lambda _s: real_sleep(0))
-    auth._failures.clear()
+    monkeypatch.setattr(auth, "FAILURE_DELAY_SECONDS", 0)
     build_services(make_router(FakeProvider("gemini"), FakeProvider("nvidia")))
     app = create_app()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
@@ -262,22 +260,37 @@ def test_tokens_expire_and_rotate_with_password():
     assert sig != pw_only
 
 
-async def test_login_failures_are_limited_globally(monkeypatch, db, settings):
+async def test_failed_logins_are_serialized_and_cannot_lock_out_owner(monkeypatch, db, settings):
     from app.api import auth
     from app.config import get_settings
 
     monkeypatch.setenv("ACCESS_PASSWORD", "pw")
     get_settings.cache_clear()
-    real_sleep = asyncio.sleep
-    monkeypatch.setattr(auth.asyncio, "sleep", lambda _s: real_sleep(0))
-    auth._failures.clear()
+    monkeypatch.setattr(auth, "FAILURE_DELAY_SECONDS", 0.05)
     app = create_app()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
-        for i in range(auth._MAX_FAILURES):
-            # A different spoofed X-Forwarded-For on each attempt must not reset the budget.
-            r = await c.post("/api/auth/login", json={"password": "x"}, headers={"X-Forwarded-For": f"10.0.0.{i}"})
-            assert r.status_code == 401
-        r = await c.post("/api/auth/login", json={"password": "pw"}, headers={"X-Forwarded-For": "1.2.3.4"})
-        assert r.status_code == 429
-    auth._failures.clear()
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        # Concurrent wrong guesses (with spoofed client addresses) are answered one after another.
+        bad = await asyncio.gather(
+            *(c.post("/api/auth/login", json={"password": "x"}, headers={"X-Forwarded-For": f"10.0.0.{i}"}) for i in range(6))
+        )
+        assert all(r.status_code == 401 for r in bad)
+        assert loop.time() - t0 >= 6 * 0.05 * 0.9
+        # The owner can still log in right away after a flood of failures.
+        assert (await c.post("/api/auth/login", json={"password": "pw"})).status_code == 200
     get_settings.cache_clear()
+
+
+async def test_chat_rejects_unknown_document_without_side_effects(client, make_router, build_services):
+    gemini = FakeProvider("gemini")
+    build_services(make_router(gemini, FakeProvider("nvidia")))
+    r = await client.post("/api/chat", json={"message": "hi", "mode": "chat", "document_ids": ["missing"]})
+    assert r.status_code == 404
+    assert gemini.calls == 0
+    assert (await client.get("/api/conversations")).json() == []
+
+
+async def test_approve_unknown_job_is_404(client, make_router, build_services):
+    build_services(make_router(FakeProvider("gemini"), FakeProvider("nvidia")))
+    assert (await client.post("/api/research/missing/approve", json={"subquestions": ["a"]})).status_code == 404

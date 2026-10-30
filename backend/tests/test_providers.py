@@ -338,3 +338,76 @@ def test_reasoning_filter_handles_split_tags():
     assert out == "Hello <b>world</b>"
     f2 = ReasoningFilter()
     assert "".join(f2.feed(c) for c in ["No ", "tags", " here"]) + f2.flush() == "No tags here"
+
+
+async def test_nvidia_disables_thinking_and_falls_back_if_rejected(settings):
+    import httpx
+    import openai
+
+    from app.services.providers.base import ChatMessage
+    from app.services.providers.nvidia import NvidiaProvider
+
+    calls: list[dict] = []
+
+    class Msg:
+        content = "answer"
+
+    class Choice:
+        message = Msg()
+
+    class Resp:
+        choices = [Choice()]
+
+    class Completions:
+        def __init__(self, reject: bool) -> None:
+            self.reject = reject
+
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            if self.reject and "extra_body" in kwargs:
+                req = httpx.Request("POST", "https://x")
+                raise openai.BadRequestError("unknown field", response=httpx.Response(400, request=req), body=None)
+            return Resp()
+
+    class Client:
+        def __init__(self, reject: bool) -> None:
+            self.chat = type("Chat", (), {"completions": Completions(reject)})()
+
+    settings.nvidia_api_key = __import__("pydantic").SecretStr("k")
+    msgs = [ChatMessage("user", "hi")]
+
+    p = NvidiaProvider(settings, client=Client(reject=False))
+    assert await p.generate(msgs) == "answer"
+    assert calls[-1]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+    calls.clear()
+    p = NvidiaProvider(settings, client=Client(reject=True))
+    assert await p.generate(msgs) == "answer"
+    assert "extra_body" in calls[0] and "extra_body" not in calls[1]
+    await p.generate(msgs)
+    assert "extra_body" not in calls[-1]  # remembered: not sent again
+
+    calls.clear()
+    settings.nvidia_thinking = True
+    p = NvidiaProvider(settings, client=Client(reject=False))
+    await p.generate(msgs)
+    assert "extra_body" not in calls[-1]
+
+
+async def test_empty_stream_falls_back_to_backup(make_router):
+    g = FakeProvider("gemini", stream_script=[[]])  # stream ends without any text
+    n = FakeProvider("nvidia")
+    events = [e async for e in make_router(g, n).stream(MSG)]
+    assert [e.provider for e in events if e.type == "provider"] == ["gemini", "nvidia"]
+    assert "".join(e.text for e in events if e.type == "token") == "streamed from nvidia"
+
+
+async def test_invalid_structured_output_falls_back_to_backup(make_router):
+    from pydantic import BaseModel
+
+    class Out(BaseModel):
+        value: int
+
+    g = FakeProvider("gemini", script=["not json", "still not json"])
+    n = FakeProvider("nvidia", script=['{"value": 7}'])
+    assert (await make_router(g, n).generate_structured(MSG, Out)).value == 7

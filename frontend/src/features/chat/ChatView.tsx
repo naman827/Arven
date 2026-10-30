@@ -41,14 +41,18 @@ export function ChatView({ conversationId }: { conversationId: string | null }) 
   const ownIdRef = useRef<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
+  const latestLoadRef = useRef<string | null>(null) // ignore responses for a conversation we already left
 
   const load = useCallback(async (id: string) => {
+    latestLoadRef.current = id
     setLoadError(null)
     try {
       const detail = await api.getConversation(id)
+      if (latestLoadRef.current !== id) return
       setConv(detail)
       setMode(detail.mode)
     } catch (e) {
+      if (latestLoadRef.current !== id) return
       setLoadError(e instanceof ApiError && e.status === 404 ? 'This conversation no longer exists.' : (e as Error).message)
       setConv(null)
     }
@@ -61,6 +65,7 @@ export function ChatView({ conversationId }: { conversationId: string | null }) 
     setLive(null)
     setSendError(null)
     if (!conversationId) {
+      latestLoadRef.current = null
       setConv(null)
       setLoadError(null)
       return

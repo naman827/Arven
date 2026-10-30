@@ -53,9 +53,16 @@ export function ReportView({ id }: { id: string }) {
   const [panel, setPanel] = useState(() => window.innerWidth >= 1280)
 
   useEffect(() => {
+    let current = true // a slow response for a previous report must not replace this one
     setReport(null)
     setError(null)
-    api.getReport(id).then(setReport, (e: Error) => setError(e.message))
+    api.getReport(id).then(
+      (r) => current && setReport(r),
+      (e: Error) => current && setError(e.message),
+    )
+    return () => {
+      current = false
+    }
   }, [id])
 
   const toc = useMemo(

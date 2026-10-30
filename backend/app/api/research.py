@@ -103,6 +103,9 @@ async def cancel_job(job_id: str) -> dict[str, object]:
 
 @router.post("/{job_id}/approve")
 async def approve_plan(job_id: str, body: PlanApproval) -> dict[str, bool]:
+    async with session_factory()() as session:
+        if await session.get(ResearchJob, job_id) is None:
+            raise HTTPException(404, "Job not found")
     if not get_services().jobs.approve(job_id, body.model_dump()):
         raise HTTPException(409, "This job is not waiting for plan approval")
     return {"approved": True}

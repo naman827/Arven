@@ -131,6 +131,9 @@ class ProviderRouter:
                     async for token in provider.stream(messages, **opts):
                         emitted_here = True
                         yield StreamEvent("token", text=token)
+                    if not emitted_here:
+                        # A stream that ends without any text is a failure, not an answer: try the backup.
+                        raise ProviderError(ErrorKind.INVALID_OUTPUT, provider.name, "empty stream")
                 except ProviderError as error:
                     if emitted_here:
                         yield StreamEvent("reset", reason=error.user_message, provider=provider.name)

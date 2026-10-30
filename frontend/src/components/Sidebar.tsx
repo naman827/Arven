@@ -34,10 +34,17 @@ export function Sidebar({ onClose, theme, onToggleTheme }: { onClose: () => void
       setResults(null)
       return
     }
+    let current = true // results of an older query must not overwrite newer ones
     const timer = window.setTimeout(() => {
-      api.listConversations(query.trim()).then(setResults, () => setResults([]))
+      api.listConversations(query.trim()).then(
+        (r) => current && setResults(r),
+        () => current && setResults([]),
+      )
     }, 250)
-    return () => window.clearTimeout(timer)
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+    }
   }, [query, conversations])
 
   const list = results ?? conversations

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     nvidia_api_key: SecretStr | None = None
     nvidia_model: str = "nvidia/nemotron-3.5-super-vl-120b-a12b"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    # Let thinking models (Nemotron) reason before answering. Off by default: slower, and long reports can come back empty.
+    nvidia_thinking: bool = False
 
     # Search
     tavily_api_key: SecretStr | None = None
