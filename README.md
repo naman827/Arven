@@ -121,7 +121,7 @@ All settings live in `.env` (see `.env.example` for comments).
 | `GEMINI_API_KEY` | empty | Primary model provider |
 | `GEMINI_MODEL` | empty (uses `gemini-3.5-flash-lite`) | Gemini model id |
 | `NVIDIA_API_KEY` | empty | Fallback model provider |
-| `NVIDIA_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | NVIDIA model id |
+| `NVIDIA_MODEL` | `nvidia/nemotron-3.5-super-vl-120b-a12b` | NVIDIA model id |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible endpoint |
 | `TAVILY_API_KEY` | empty | Web search |
 | `SEARCH_PROVIDER` | `tavily` | Primary search provider |
