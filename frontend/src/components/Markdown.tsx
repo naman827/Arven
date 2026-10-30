@@ -71,7 +71,7 @@ export const Markdown = memo(function Markdown({ content, sources, onCitation, a
             onClick={() => onCitation?.(n)}
             title={label}
             aria-label={`Citation ${n}: ${label}`}
-            className="mx-0.5 inline-flex h-[1.15rem] min-w-[1.15rem] -translate-y-px items-center justify-center rounded bg-accent-soft px-1 align-middle text-[11px] font-semibold text-accent no-underline hover:bg-accent hover:text-accent-fg"
+            className="ml-0.5 inline-flex h-[1.15rem] min-w-[1.15rem] -translate-y-px items-center justify-center rounded bg-accent-soft px-1 align-middle text-[11px] font-semibold text-accent no-underline hover:bg-accent hover:text-accent-fg"
           >
             {n}
           </button>
