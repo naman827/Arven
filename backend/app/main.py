@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
         allow_origins=sorted(origins),
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "Last-Event-ID", "Authorization"],
+        expose_headers=["Content-Disposition"],  # PDF filename for cross-origin downloads
     )
 
     @app.exception_handler(Exception)

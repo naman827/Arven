@@ -161,7 +161,7 @@ The frontend dev server proxies `/api` to `http://127.0.0.1:8000`. Override with
 Netlify serves the static frontend. The FastAPI backend needs a long-running Python server (Deep Research streams for minutes), so it runs on Render. A deployed backend requires `ACCESS_PASSWORD`; the app shows a login screen and refuses to start on a public address without it.
 
 1. **Backend on Render.** In Render: New > Blueprint > pick this GitHub repo. Render reads `render.yaml` and asks for:
-   - `ACCESS_PASSWORD`: a long password you choose
+   - `ACCESS_PASSWORD`: a password you choose, at least 12 characters (`SESSION_SECRET` is generated automatically)
    - `FRONTEND_ORIGIN`: your Netlify URL (fill in after step 2, then redeploy), e.g. `https://arven-ai.netlify.app`
    - `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `TAVILY_API_KEY`
 

@@ -17,9 +17,12 @@ services:
       # Public server behind ACCESS_PASSWORD: any Host header is fine (DNS-rebinding protection is for localhost).
       - key: ALLOWED_HOSTS
         value: "*"
-      # Required. The app refuses to start on 0.0.0.0 without it.
+      # Required, at least 12 characters. The app refuses to start on 0.0.0.0 without it.
       - key: ACCESS_PASSWORD
         sync: false
+      # Random secret that signs login tokens; Render generates it once.
+      - key: SESSION_SECRET
+        generateValue: true
       # Your Netlify site URL, e.g. https://arven-ai.netlify.app (no trailing slash)
       - key: FRONTEND_ORIGIN
         sync: false

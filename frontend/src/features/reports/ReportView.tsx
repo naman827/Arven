@@ -1,7 +1,8 @@
-import { ArrowLeft, Check, Copy, Download, FileText, Loader2, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { ArrowLeft, Check, Copy, FileText, Loader2, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { Markdown } from '@/components/Markdown'
+import { PdfDownloadButton } from '@/components/PdfDownloadButton'
 import { focusSource, SourceList } from '@/components/SourceList'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/hooks/useApp'
@@ -104,11 +105,7 @@ export function ReportView({ id }: { id: string }) {
             >
               {copied ? <Check /> : <Copy />} {copied ? 'Copied' : 'Copy'}
             </Button>
-            <Button variant="primary" size="sm" asChild>
-              <a href={api.reportPdfUrl(report.id)} download>
-                <Download /> PDF
-              </a>
-            </Button>
+            <PdfDownloadButton reportId={report.id} label="PDF" variant="primary" />
             <Button variant="ghost" size="icon-sm" onClick={() => setPanel((p) => !p)} aria-label={panel ? 'Hide sources panel' : 'Show sources panel'} aria-expanded={panel}>
               {panel ? <PanelRightClose /> : <PanelRightOpen />}
             </Button>

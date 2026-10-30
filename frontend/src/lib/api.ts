@@ -30,13 +30,6 @@ function withAuth(init?: RequestInit): RequestInit {
   return { ...init, headers }
 }
 
-/** URL for GET endpoints that cannot send headers (EventSource, download links). */
-export function authUrl(path: string): string {
-  const token = getToken()
-  const sep = path.includes('?') ? '&' : '?'
-  return `${API_BASE}${path}${token ? `${sep}access_token=${encodeURIComponent(token)}` : ''}`
-}
-
 const UNREACHABLE = API_BASE
   ? 'Cannot reach the ARVEN AI backend. It may be waking up; try again in a minute.'
   : 'Cannot reach the ARVEN AI backend. Is it running on 127.0.0.1:8000?'
@@ -186,11 +179,12 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   let res: Response
   try {
     res = await fetch(`${API_BASE}${path}`, withAuth(init))
-  } catch {
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err
     throw new ApiError(0, UNREACHABLE)
   }
   if (!res.ok) {
@@ -204,6 +198,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, detail || `Request failed (${res.status})`)
   }
+  return res
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await send(path, init)
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
@@ -235,7 +234,11 @@ export const api = {
 
   listReports: () => request<ReportSummary[]>('/api/reports'),
   getReport: (id: string) => request<Report>(`/api/reports/${id}`),
-  reportPdfUrl: (id: string) => authUrl(`/api/reports/${id}/pdf`),
+  reportPdf: async (id: string) => {
+    const res = await send(`/api/reports/${id}/pdf`)
+    const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1]
+    return { blob: await res.blob(), filename: name ?? 'report.pdf' }
+  },
 
   listDocuments: () => request<DocumentInfo[]>('/api/documents'),
   uploadDocument: (file: File) => {
@@ -300,6 +303,15 @@ export function parseBlock(block: string): StreamEvent | null {
   } catch {
     return null
   }
+}
+
+/** Open a GET SSE stream with the auth header (EventSource cannot send headers). */
+export async function openEventStream(path: string, lastEventId: number | undefined, signal: AbortSignal) {
+  const headers: Record<string, string> = { Accept: 'text/event-stream' }
+  if (lastEventId !== undefined) headers['Last-Event-ID'] = String(lastEventId)
+  const res = await send(path, { headers, signal })
+  if (!res.body) throw new ApiError(0, 'Empty event stream')
+  return readSse(res.body)
 }
 
 export async function streamChat(

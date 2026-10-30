@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react'
 
-import { authUrl, type Plan, type SourceInfo, type Verification } from '@/lib/api'
+import { ApiError, openEventStream, type Plan, type SourceInfo, type Verification } from '@/lib/api'
 
 export interface JobState {
   status: string
@@ -83,37 +83,61 @@ const EVENT_TYPES = [
   'provider', 'token', 'reset', 'verification', 'done', 'error',
 ]
 
-/** Subscribes to a job's SSE stream. Replays from the start so a refresh rebuilds the timeline. */
+const RECONNECT_MS = 2000
+
+/**
+ * Subscribes to a job's SSE stream. Replays from the start so a refresh rebuilds the timeline, and
+ * reconnects with Last-Event-ID if the connection drops. Uses fetch so the auth header can be sent.
+ */
 export function useResearchJob(jobId: string | null, onFinished?: () => void) {
   const [state, dispatch] = useReducer(jobReducer, initialJobState)
 
   useEffect(() => {
     dispatch({ type: '__reset' })
     if (!jobId) return
-    const es = new EventSource(authUrl(`/api/research/${jobId}/events`))
+    const controller = new AbortController()
+    let lastId: number | undefined
     let finished = false
     const finish = () => {
       if (finished) return
       finished = true
-      es.close()
+      controller.abort()
       dispatch({ type: '__connected', value: false })
       onFinished?.()
     }
-    es.onopen = () => dispatch({ type: '__connected', value: true })
-    for (const t of EVENT_TYPES) {
-      es.addEventListener(t, (ev) => {
-        let data: Record<string, unknown> = {}
-        try {
-          data = JSON.parse((ev as MessageEvent).data)
-        } catch {
-          return
-        }
-        dispatch({ type: t, data })
-        if (t === 'done' || t === 'error' || (t === 'status' && data.status === 'cancelled')) finish()
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = window.setTimeout(resolve, ms)
+        controller.signal.addEventListener('abort', () => (window.clearTimeout(t), resolve()), { once: true })
       })
-    }
-    es.onerror = () => dispatch({ type: '__connected', value: false }) // EventSource retries with Last-Event-ID
-    return () => es.close()
+
+    void (async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const stream = await openEventStream(`/api/research/${jobId}/events`, lastId, controller.signal)
+          dispatch({ type: '__connected', value: true })
+          for await (const ev of stream) {
+            if (ev.id !== undefined) lastId = ev.id
+            if (!EVENT_TYPES.includes(ev.type)) continue
+            dispatch({ type: ev.type, data: ev.data })
+            if (ev.type === 'done' || ev.type === 'error' || (ev.type === 'status' && ev.data.status === 'cancelled')) {
+              finish()
+              return
+            }
+          }
+        } catch (err) {
+          if (controller.signal.aborted) return
+          // Missing job or signed out: retrying will not help.
+          if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+            dispatch({ type: '__connected', value: false })
+            return
+          }
+        }
+        dispatch({ type: '__connected', value: false })
+        await wait(RECONNECT_MS)
+      }
+    })()
+    return () => controller.abort()
     // onFinished intentionally excluded: subscription lifetime is tied to the job id only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])

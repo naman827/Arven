@@ -4,6 +4,7 @@ import os
 
 import uvicorn
 
+from app.api.auth import MIN_PASSWORD_LENGTH
 from app.config import get_settings, secret
 
 if __name__ == "__main__":
@@ -14,6 +15,8 @@ if __name__ == "__main__":
             "Refusing to bind to a non-local address without ACCESS_PASSWORD. Set ACCESS_PASSWORD (deployment) "
             "or BACKEND_HOST=127.0.0.1 (local use)."
         )
+    if not local and len(secret(cfg.access_password)) < MIN_PASSWORD_LENGTH:
+        raise SystemExit(f"ACCESS_PASSWORD must be at least {MIN_PASSWORD_LENGTH} characters for a public deployment.")
     # Hosting platforms such as Render pass the port in $PORT.
     port = int(os.environ.get("PORT", cfg.backend_port))
     uvicorn.run(
@@ -21,8 +24,6 @@ if __name__ == "__main__":
         host=cfg.backend_host,
         port=port,
         log_level="info",
-        # Deployed: access logs would record ?access_token= query strings, and proxy headers carry the client IP.
-        access_log=local,
-        proxy_headers=not local,
-        forwarded_allow_ips="*" if not local else None,
+        # Forwarded headers are client-controlled unless the proxy's addresses are known; nothing relies on them.
+        proxy_headers=False,
     )

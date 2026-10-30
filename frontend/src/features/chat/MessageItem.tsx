@@ -1,12 +1,13 @@
-import { AlertTriangle, Check, Copy, Download, FileText, RotateCcw, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Check, Copy, FileText, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 
 import { Markdown } from '@/components/Markdown'
+import { PdfDownloadButton } from '@/components/PdfDownloadButton'
 import { focusSource, SourceList } from '@/components/SourceList'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/overlays'
 import { useApp } from '@/hooks/useApp'
-import { api, type Message, type SourceInfo, type Verification } from '@/lib/api'
+import type { Message, SourceInfo, Verification } from '@/lib/api'
 import { copyText, MODE_LABEL, PROVIDER_LABEL } from '@/lib/utils'
 
 export function UserMessage({ content }: { content: string }) {
@@ -110,11 +111,7 @@ export function MessageItem({ message, isLast, onRegenerate, busy }: { message: 
             <Button size="sm" variant="primary" onClick={() => navigate({ view: 'report', id: reportId })}>
               Open report
             </Button>
-            <Button size="sm" variant="secondary" asChild>
-              <a href={api.reportPdfUrl(reportId)} download>
-                <Download /> Download PDF
-              </a>
-            </Button>
+            <PdfDownloadButton reportId={reportId} label="Download PDF" variant="secondary" />
           </div>
         </div>
       ) : failed ? (

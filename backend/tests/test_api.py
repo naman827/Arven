@@ -1,6 +1,8 @@
 """API contract tests: chat/research streaming, history, documents, reports/PDF, settings, SSE resume."""
 
 import asyncio
+import hashlib
+import hmac
 import json
 
 import httpx
@@ -240,9 +242,8 @@ async def test_access_password_gates_api(monkeypatch, db, make_router, build_ser
         token = (await c.post("/api/auth/login", json={"password": "correct horse"})).json()["token"]
         h = {"Authorization": f"Bearer {token}"}
         assert (await c.get("/api/conversations", headers=h)).status_code == 200
-        assert (await c.get(f"/api/conversations?access_token={token}")).status_code == 200
-        # query tokens are only accepted on GET
-        assert (await c.delete(f"/api/conversations/x?access_token={token}")).status_code == 401
+        # tokens are never accepted in URLs
+        assert (await c.get(f"/api/conversations?access_token={token}")).status_code == 401
         assert (await c.get("/api/conversations", headers={"Authorization": "Bearer 1.bad"})).status_code == 401
         assert (await c.get("/api/auth/status", headers=h)).json()["authenticated"] is True
     get_settings.cache_clear()
@@ -255,3 +256,28 @@ def test_tokens_expire_and_rotate_with_password():
     assert token_valid(t, "pw", now=1001)
     assert not token_valid(t, "pw", now=1000 + TOKEN_TTL_SECONDS + 1)
     assert not token_valid(t, "other", now=1001)
+    # The signature is keyed by a server secret, not by the password alone.
+    expires, _, sig = t.partition(".")
+    pw_only = hmac.new(hashlib.sha256(b"arven-access:pw").digest(), expires.encode(), hashlib.sha256).hexdigest()
+    assert sig != pw_only
+
+
+async def test_login_failures_are_limited_globally(monkeypatch, db, settings):
+    from app.api import auth
+    from app.config import get_settings
+
+    monkeypatch.setenv("ACCESS_PASSWORD", "pw")
+    get_settings.cache_clear()
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(auth.asyncio, "sleep", lambda _s: real_sleep(0))
+    auth._failures.clear()
+    app = create_app()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        for i in range(auth._MAX_FAILURES):
+            # A different spoofed X-Forwarded-For on each attempt must not reset the budget.
+            r = await c.post("/api/auth/login", json={"password": "x"}, headers={"X-Forwarded-For": f"10.0.0.{i}"})
+            assert r.status_code == 401
+        r = await c.post("/api/auth/login", json={"password": "pw"}, headers={"X-Forwarded-For": "1.2.3.4"})
+        assert r.status_code == 429
+    auth._failures.clear()
+    get_settings.cache_clear()

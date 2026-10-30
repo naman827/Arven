@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     allowed_hosts: str = "127.0.0.1,localhost"
     # Required when the backend is reachable from the internet; empty means no login (local use only).
     access_password: SecretStr | None = None
+    # Random secret that signs login tokens. If empty, a new one is generated at each start (users log in again).
+    session_secret: SecretStr | None = None
 
     # Research budgets (conservative defaults)
     max_search_rounds: int = Field(default=2, ge=1, le=4)

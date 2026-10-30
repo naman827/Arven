@@ -84,7 +84,7 @@ test('deep research: plan review, progress, report, PDF download', async ({ page
   await expect(page.getByText(/fabricated claim/)).toHaveCount(0)
   await shot(page, 'desktop-report-dark')
 
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'PDF' }).click()])
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF', exact: true }).click()])
   const file = await download.path()
   expect(fs.readFileSync(file).subarray(0, 5).toString()).toBe('%PDF-')
   expect(download.suggestedFilename()).toMatch(/\.pdf$/)
