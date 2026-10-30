@@ -318,3 +318,23 @@ async def test_status_never_contains_key(monkeypatch, settings):
     status = str(router.provider_status(g)) + str(router.overall_status())
     assert "TESTSECRET" not in status
     get_settings.cache_clear()
+
+
+def test_strip_reasoning_removes_think_blocks():
+    from app.services.providers.nvidia import strip_reasoning
+
+    assert strip_reasoning("<think>plan it</think>\n\n{\"a\": 1}") == '{"a": 1}'
+    assert strip_reasoning("reasoning without open tag</think>Answer") == "Answer"
+    assert strip_reasoning("<think>never closed") == ""
+    assert strip_reasoning("Plain answer") == "Plain answer"
+
+
+def test_reasoning_filter_handles_split_tags():
+    from app.services.providers.nvidia import ReasoningFilter
+
+    f = ReasoningFilter()
+    chunks = ["<thi", "nk>secret ", "steps</th", "ink>\n\nHello ", "<", "b>world</b>"]
+    out = "".join(f.feed(c) for c in chunks) + f.flush()
+    assert out == "Hello <b>world</b>"
+    f2 = ReasoningFilter()
+    assert "".join(f2.feed(c) for c in ["No ", "tags", " here"]) + f2.flush() == "No tags here"

@@ -1,6 +1,7 @@
 """NVIDIA API catalog provider via its OpenAI-compatible endpoint."""
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -45,6 +46,57 @@ def classify_openai_error(exc: BaseException, provider: str = "nvidia") -> Provi
     return ProviderError(ErrorKind.UNKNOWN, provider, type(exc).__name__)
 
 
+_OPEN, _CLOSE = "<think>", "</think>"
+_THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
+
+
+def strip_reasoning(text: str) -> str:
+    """Remove inline <think> blocks that reasoning models emit before the answer."""
+    if _CLOSE in text and _OPEN not in text:
+        # Some models omit the opening tag and start directly with reasoning.
+        text = text.split(_CLOSE, 1)[1]
+    return _THINK_RE.sub("", text).lstrip()
+
+
+class ReasoningFilter:
+    """Streaming counterpart of strip_reasoning; handles tags split across chunks."""
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._thinking = False
+        self._started = False  # leading whitespace before the answer is dropped
+
+    def feed(self, chunk: str) -> str:
+        self._buf += chunk
+        out: list[str] = []
+        while True:
+            tag = _CLOSE if self._thinking else _OPEN
+            idx = self._buf.find(tag)
+            if idx >= 0:
+                if not self._thinking:
+                    out.append(self._buf[:idx])
+                self._buf = self._buf[idx + len(tag) :]
+                self._thinking = not self._thinking
+                continue
+            # Keep a possible partial tag at the end for the next chunk.
+            keep = next((k for k in range(min(len(tag) - 1, len(self._buf)), 0, -1) if tag.startswith(self._buf[-k:])), 0)
+            if not self._thinking:
+                out.append(self._buf[: len(self._buf) - keep])
+            self._buf = self._buf[len(self._buf) - keep :]
+            break
+        return self._emit("".join(out))
+
+    def flush(self) -> str:
+        rest, self._buf = ("" if self._thinking else self._buf), ""
+        return self._emit(rest)
+
+    def _emit(self, text: str) -> str:
+        if not self._started:
+            text = text.lstrip()
+            self._started = bool(text)
+        return text
+
+
 class NvidiaProvider(ModelProvider):
     name = "nvidia"
 
@@ -87,7 +139,7 @@ class NvidiaProvider(ModelProvider):
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
             raise classify_openai_error(exc) from exc
-        text = (response.choices[0].message.content or "") if response.choices else ""
+        text = strip_reasoning((response.choices[0].message.content or "") if response.choices else "")
         if not text.strip():
             raise ProviderError(ErrorKind.INVALID_OUTPUT, self.name, "empty response")
         return text
@@ -102,8 +154,12 @@ class NvidiaProvider(ModelProvider):
                 max_tokens=max_tokens or 4096,
                 stream=True,
             )
+            reasoning = ReasoningFilter()
             async for chunk in response:
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                    if text := reasoning.feed(chunk.choices[0].delta.content):
+                        yield text
+            if text := reasoning.flush():
+                yield text
         except Exception as exc:
             raise classify_openai_error(exc) from exc
