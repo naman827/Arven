@@ -20,12 +20,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 TOKEN_TTL_SECONDS = 7 * 24 * 3600
 MIN_PASSWORD_LENGTH = 12
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/status"}
-# Every login attempt (right or wrong) waits its turn and is delayed before the password is compared, so
-# guessing is capped at about one try per second across all clients. Client addresses behind a hosting proxy
-# are spoofable (X-Forwarded-For), so the limit is global. Attempts beyond a short queue get 429. During a
-# flood the owner may have to retry, but browsers that are already signed in keep working (7-day tokens).
+# Every login attempt (right or wrong) waits its turn in a first-in-first-out queue and is delayed before the
+# password is compared, so guessing is capped at about one try per second across all clients. Client addresses
+# behind a hosting proxy are spoofable (X-Forwarded-For), so the limit is global. A correct password is not
+# answered ahead of the queue (that would let concurrent guessing bypass the limit); instead the queue is long
+# enough that during a flood the owner waits up to about a minute rather than being rejected. Browsers that are
+# already signed in are unaffected (7-day tokens).
 ATTEMPT_DELAY_SECONDS = 1.0
-MAX_QUEUED_ATTEMPTS = 5
+MAX_QUEUED_ATTEMPTS = 60
 _attempt_lock = asyncio.Lock()
 _queued = 0
 # Fallback when SESSION_SECRET is not set: tokens then stop working when the process restarts.

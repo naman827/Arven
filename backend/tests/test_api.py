@@ -267,6 +267,7 @@ async def test_login_attempts_are_throttled_before_comparison(monkeypatch, db, s
     monkeypatch.setenv("ACCESS_PASSWORD", "pw")
     get_settings.cache_clear()
     monkeypatch.setattr(auth, "ATTEMPT_DELAY_SECONDS", 0.05)
+    monkeypatch.setattr(auth, "MAX_QUEUED_ATTEMPTS", 5)
     app = create_app()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         loop = asyncio.get_running_loop()
