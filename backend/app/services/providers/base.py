@@ -61,7 +61,8 @@ class ModelProvider(ABC):
                 raise ProviderError(ErrorKind.INVALID_OUTPUT, self.name, str(second)) from second
 
     async def test_connection(self) -> str:
-        reply = await self.generate([ChatMessage("user", "Reply with the single word: ok")], max_tokens=16)
+        # Thinking models spend output tokens on reasoning before answering, so a tiny cap returns nothing.
+        reply = await self.generate([ChatMessage("user", "Reply with the single word: ok")], max_tokens=1024)
         return reply.strip()[:40]
 
 
