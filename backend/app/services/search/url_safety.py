@@ -106,6 +106,25 @@ class FetchResult:
     body: bytes
 
 
+def check_peer(response: httpx.Response) -> None:
+    """Re-check the address the socket actually connected to.
+
+    resolve_and_check() runs before the request, and DNS can answer differently a moment later
+    (DNS rebinding). Checking the connected peer stops a private address's response from being read.
+    Transports without a network stream (test mocks) are skipped.
+    """
+    stream = response.extensions.get("network_stream")
+    addr = stream.get_extra_info("server_addr") if stream is not None else None
+    if not addr:
+        return
+    try:
+        ip = ipaddress.ip_address(addr[0].split("%", 1)[0])
+    except ValueError as exc:
+        raise UnsafeURLError("could not verify connected address") from exc
+    if not is_public_ip(ip):
+        raise UnsafeURLError("connected to a non-public address")
+
+
 async def safe_fetch(url: str, *, client: httpx.AsyncClient, timeout: float = 15.0) -> FetchResult:
     """GET with manual redirects; every hop is re-validated. Caps size and content type."""
     current = url
@@ -118,6 +137,7 @@ async def safe_fetch(url: str, *, client: httpx.AsyncClient, timeout: float = 15
             timeout=timeout,
             headers={"User-Agent": "ArvenAI-Research/1.0 (+local research assistant)", "Accept": "text/html,text/plain,application/pdf"},
         ) as response:
+            check_peer(response)
             if response.status_code in (301, 302, 303, 307, 308):
                 location = response.headers.get("location")
                 if not location:

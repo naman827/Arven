@@ -156,3 +156,23 @@ async def test_tavily_normalization_and_extract(settings, monkeypatch):
     assert len(out) == 1 and out[0].canonical_url == "https://a.com/p" and out[0].published_date == "2026-01-02"
     ext = await t.extract(["https://a.com/1", "https://b.com/2"])
     assert ext["https://a.com/1"] == "text" and isinstance(ext["https://b.com/2"], SearchError)
+
+
+def test_check_peer_blocks_rebinding_to_private_address():
+    import httpx
+
+    from app.services.search.url_safety import UnsafeURLError, check_peer
+
+    class Stream:
+        def __init__(self, ip: str) -> None:
+            self.ip = ip
+
+        def get_extra_info(self, name: str):
+            return (self.ip, 443) if name == "server_addr" else None
+
+    with pytest.raises(UnsafeURLError):
+        check_peer(httpx.Response(200, extensions={"network_stream": Stream("127.0.0.1")}))
+    with pytest.raises(UnsafeURLError):
+        check_peer(httpx.Response(200, extensions={"network_stream": Stream("169.254.169.254")}))
+    check_peer(httpx.Response(200, extensions={"network_stream": Stream("93.184.215.14")}))
+    check_peer(httpx.Response(200))  # mock transport: nothing to check

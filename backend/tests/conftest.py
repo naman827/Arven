@@ -30,6 +30,7 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MAX_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("ALLOWED_HOSTS", "127.0.0.1,localhost,test")
     get_settings.cache_clear()
     s = get_settings()
     yield s

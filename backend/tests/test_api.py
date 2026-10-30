@@ -207,3 +207,14 @@ async def test_cors_only_allows_local_frontend(client, make_router, build_servic
     bad = await client.options("/api/health", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
     assert ok.headers.get("access-control-allow-origin") == "http://localhost:5173"
     assert "access-control-allow-origin" not in bad.headers
+
+
+async def test_rejects_foreign_host_and_origin(client, make_router, build_services):
+    build_services(make_router(FakeProvider("gemini"), FakeProvider("nvidia")))
+    # DNS rebinding: a page on attacker.example resolving to 127.0.0.1 sends its own Host header.
+    r = await client.get("/api/conversations", headers={"Host": "attacker.example"})
+    assert r.status_code == 400
+    r = await client.delete("/api/conversations/x", headers={"Origin": "https://attacker.example"})
+    assert r.status_code == 403
+    r = await client.get("/api/health")
+    assert r.status_code == 200
