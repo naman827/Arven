@@ -229,7 +229,7 @@ async def test_access_password_gates_api(monkeypatch, db, make_router, build_ser
 
     monkeypatch.setenv("ACCESS_PASSWORD", "correct horse")
     get_settings.cache_clear()
-    monkeypatch.setattr(auth, "FAILURE_DELAY_SECONDS", 0)
+    monkeypatch.setattr(auth, "ATTEMPT_DELAY_SECONDS", 0)
     build_services(make_router(FakeProvider("gemini"), FakeProvider("nvidia")))
     app = create_app()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
@@ -260,24 +260,27 @@ def test_tokens_expire_and_rotate_with_password():
     assert sig != pw_only
 
 
-async def test_failed_logins_are_serialized_and_cannot_lock_out_owner(monkeypatch, db, settings):
+async def test_login_attempts_are_throttled_before_comparison(monkeypatch, db, settings):
     from app.api import auth
     from app.config import get_settings
 
     monkeypatch.setenv("ACCESS_PASSWORD", "pw")
     get_settings.cache_clear()
-    monkeypatch.setattr(auth, "FAILURE_DELAY_SECONDS", 0.05)
+    monkeypatch.setattr(auth, "ATTEMPT_DELAY_SECONDS", 0.05)
     app = create_app()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         loop = asyncio.get_running_loop()
         t0 = loop.time()
-        # Concurrent wrong guesses (with spoofed client addresses) are answered one after another.
-        bad = await asyncio.gather(
-            *(c.post("/api/auth/login", json={"password": "x"}, headers={"X-Forwarded-For": f"10.0.0.{i}"}) for i in range(6))
+        # 8 concurrent attempts (spoofed addresses, the correct password among them): all are serialized,
+        # extras beyond the queue are rejected, and the correct one is not answered ahead of the queue.
+        attempts = [{"password": "x"}] * 4 + [{"password": "pw"}] + [{"password": "x"}] * 3
+        rs = await asyncio.gather(
+            *(c.post("/api/auth/login", json=a, headers={"X-Forwarded-For": f"10.0.0.{i}"}) for i, a in enumerate(attempts))
         )
-        assert all(r.status_code == 401 for r in bad)
-        assert loop.time() - t0 >= 6 * 0.05 * 0.9
-        # The owner can still log in right away after a flood of failures.
+        codes = [r.status_code for r in rs]
+        assert codes.count(429) == len(attempts) - auth.MAX_QUEUED_ATTEMPTS
+        assert loop.time() - t0 >= auth.MAX_QUEUED_ATTEMPTS * 0.05 * 0.9
+        # Once the flood is over the owner logs in normally.
         assert (await c.post("/api/auth/login", json={"password": "pw"})).status_code == 200
     get_settings.cache_clear()
 

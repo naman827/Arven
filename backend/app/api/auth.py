@@ -20,11 +20,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 TOKEN_TTL_SECONDS = 7 * 24 * 3600
 MIN_PASSWORD_LENGTH = 12
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/status"}
-# Failed logins are answered one at a time, each after a delay, so guessing is capped at about one try per
-# second across all clients. Client addresses behind a hosting proxy are spoofable (X-Forwarded-For), so this
-# is global; and since the correct password is checked first, an attacker cannot lock the owner out.
-FAILURE_DELAY_SECONDS = 1.0
-_failure_lock = asyncio.Lock()
+# Every login attempt (right or wrong) waits its turn and is delayed before the password is compared, so
+# guessing is capped at about one try per second across all clients. Client addresses behind a hosting proxy
+# are spoofable (X-Forwarded-For), so the limit is global. Attempts beyond a short queue get 429. During a
+# flood the owner may have to retry, but browsers that are already signed in keep working (7-day tokens).
+ATTEMPT_DELAY_SECONDS = 1.0
+MAX_QUEUED_ATTEMPTS = 5
+_attempt_lock = asyncio.Lock()
+_queued = 0
 # Fallback when SESSION_SECRET is not set: tokens then stop working when the process restarts.
 _PROCESS_SECRET = secrets.token_bytes(32)
 
@@ -80,9 +83,17 @@ async def login(body: LoginIn) -> dict[str, str | int]:
     password = secret(get_settings().access_password)
     if not password:
         return {"token": "", "expires_in": 0}
-    if hmac.compare_digest(body.password.encode(), password.encode()):
-        return {"token": issue_token(password), "expires_in": TOKEN_TTL_SECONDS}
-    async with _failure_lock:
-        await asyncio.sleep(FAILURE_DELAY_SECONDS)
-    raise HTTPException(401, "Wrong password")
+    global _queued
+    if _queued >= MAX_QUEUED_ATTEMPTS:
+        raise HTTPException(429, "Too many login attempts right now. Try again in a few seconds.")
+    _queued += 1
+    try:
+        async with _attempt_lock:
+            await asyncio.sleep(ATTEMPT_DELAY_SECONDS)
+            ok = hmac.compare_digest(body.password.encode(), password.encode())
+    finally:
+        _queued -= 1
+    if not ok:
+        raise HTTPException(401, "Wrong password")
+    return {"token": issue_token(password), "expires_in": TOKEN_TTL_SECONDS}
 
