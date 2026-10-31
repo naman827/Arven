@@ -12,6 +12,7 @@ from app.db.models import Conversation, Message, ResearchJob, Source
 from app.db.session import session_factory
 from app.schemas.api import JobOut, PlanApproval, ResearchRequest, SourceOut
 from app.services.container import get_services
+from app.services.memory import schedule_learning
 
 router = APIRouter(prefix="/api/research", tags=["research"])
 
@@ -43,6 +44,7 @@ async def start_research(req: ResearchRequest) -> dict[str, str]:
         job_id, conversation_id = job.id, conv.id
     await services.jobs.emit(job_id, "status", {"status": "queued"})
     services.jobs.start(job_id, lambda: services.orchestrator.run(job_id))
+    schedule_learning(services.router, req.question.strip(), conversation_id)
     return {"job_id": job_id, "conversation_id": conversation_id}
 
 

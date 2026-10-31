@@ -7,6 +7,7 @@ export type Route =
   | { view: 'reports' }
   | { view: 'report'; id: string }
   | { view: 'documents' }
+  | { view: 'memory' }
   | { view: 'settings' }
 
 export function parseHash(hash: string): Route {
@@ -15,6 +16,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'reports' && parts[1]) return { view: 'report', id: parts[1] }
   if (parts[0] === 'reports') return { view: 'reports' }
   if (parts[0] === 'documents') return { view: 'documents' }
+  if (parts[0] === 'memory') return { view: 'memory' }
   if (parts[0] === 'settings') return { view: 'settings' }
   return { view: 'home' }
 }
@@ -29,6 +31,8 @@ export function routeToHash(route: Route): string {
       return '#/reports'
     case 'documents':
       return '#/documents'
+    case 'memory':
+      return '#/memory'
     case 'settings':
       return '#/settings'
     default:

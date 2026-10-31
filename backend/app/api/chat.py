@@ -14,6 +14,7 @@ from app.db.session import session_factory
 from app.schemas.api import ChatRequest
 from app.services.chat import DocContext, TurnResult, run_chat, run_research
 from app.services.container import get_services
+from app.services.memory import memory_context, schedule_learning
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -121,6 +122,7 @@ async def _save(conversation_id: str, mode: str, result: TurnResult, status: str
 async def chat(req: ChatRequest) -> StreamingResponse:
     services = get_services()
     conversation_id, user_message_id, question, history, docs = await _prepare(req)
+    memory = await memory_context()
 
     async def stream() -> AsyncIterator[str]:
         result = TurnResult()
@@ -130,12 +132,14 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         )
         try:
             if req.mode == "research":
-                events = run_research(services.router, services.search, question, history, docs, result)
+                events = run_research(services.router, services.search, question, history, docs, result, memory)
             else:
-                events = run_chat(services.router, question, history, docs, result)
+                events = run_chat(services.router, question, history, docs, result, memory)
             async for event in events:
                 yield format_sse(event)
             status = "complete"
+            if not req.regenerate and not result.error:
+                schedule_learning(services.router, question, conversation_id)
         finally:
             with anyio.CancelScope(shield=True):
                 message_id = await _save(conversation_id, req.mode, result, status)

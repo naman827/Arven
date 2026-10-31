@@ -9,11 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import auth, chat, conversations, documents, reports, research, settings
+from app.api import auth, chat, conversations, documents, memory, reports, research, settings
 from app.config import get_settings
 from app.db.session import dispose_engine, init_db, mark_interrupted_jobs
 from app.logging import setup_logging
 from app.services.container import build_services, get_services, set_services
+from app.services.memory import wait_for_learning
 
 log = logging.getLogger("arven")
 
@@ -41,6 +42,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     await services.jobs.shutdown()
+    await wait_for_learning()
     await services.search.aclose()
     await dispose_engine()
 
@@ -89,7 +91,7 @@ def create_app() -> FastAPI:
         log.error("unhandled error: %s", type(exc).__name__, exc_info=exc)
         return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
-    for module in (auth, chat, conversations, research, documents, reports, settings):
+    for module in (auth, chat, conversations, research, documents, reports, settings, memory):
         app.include_router(module.router)
     # Added last so it runs first: reject any Host header that is not ours (DNS rebinding).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[h.strip() for h in cfg.allowed_hosts.split(",") if h.strip()])

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.config import Settings
 from app.db.models import Conversation, Message, Report, ResearchJob, Source
 from app.db.session import session_factory
+from app.services.memory import memory_context
 from app.services.providers.errors import AllProvidersFailedError, ProviderError
 from app.services.providers.router import ProviderRouter, error_message
 from app.services.research.analyst import analyze_subquestion
@@ -110,7 +111,8 @@ class DeepResearchOrchestrator:
 
         # A. Plan
         await self.jobs.set_status(job_id, "planning")
-        plan = await make_plan(self.router, question, focus=focus)
+        memory = await memory_context()
+        plan = await make_plan(self.router, question, focus=focus, memory=memory)
         await self.jobs.emit(job_id, "plan", plan.model_dump())
         await self.jobs.set_status(job_id, "planning", plan=plan.model_dump())
         if options.get("review_plan"):
@@ -173,7 +175,9 @@ class DeepResearchOrchestrator:
             f"{len(registry.records)} sources found, {len(registry.readable())} read; up to {self.budget.max_search_rounds} search rounds; "
             "findings cross-checked across sources and every citation verified against stored evidence after drafting."
         )
-        messages = writer_messages(question, plan, analyses, registry, max_words=self.budget.max_report_words, method_note=method_note)
+        messages = writer_messages(
+            question, plan, analyses, registry, max_words=self.budget.max_report_words, method_note=method_note, memory=memory
+        )
         draft = await self._stream_draft(job_id, messages)
 
         # F. Verify citations

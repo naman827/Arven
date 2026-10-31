@@ -151,6 +151,15 @@ export interface DocumentInfo {
   created_at: string
 }
 
+export interface MemoryItem {
+  id: string
+  content: string
+  source: 'manual' | 'auto'
+  conversation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ProviderStatus {
   name: string
   configured: boolean
@@ -247,6 +256,14 @@ export const api = {
     return request<DocumentInfo>('/api/documents', { method: 'POST', body: form })
   },
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: 'DELETE' }),
+
+  listMemories: () => request<{ auto_learn: boolean; memories: MemoryItem[] }>('/api/memory'),
+  addMemory: (content: string) => request<MemoryItem>('/api/memory', json({ content })),
+  updateMemory: (id: string, content: string) => request<MemoryItem>(`/api/memory/${id}`, { ...json({ content }), method: 'PATCH' }),
+  deleteMemory: (id: string) => request<void>(`/api/memory/${id}`, { method: 'DELETE' }),
+  clearMemories: () => request<void>('/api/memory', { method: 'DELETE' }),
+  setMemoryAutoLearn: (auto_learn: boolean) =>
+    request<{ auto_learn: boolean }>('/api/memory/settings', { ...json({ auto_learn }), method: 'PATCH' }),
 
   authStatus: () => request<{ required: boolean; authenticated: boolean }>('/api/auth/status'),
   login: (password: string) => request<{ token: string; expires_in: number }>('/api/auth/login', json({ password })),

@@ -26,6 +26,7 @@ def writer_messages(
     *,
     max_words: int,
     method_note: str,
+    memory: str = "",
 ) -> list[ChatMessage]:
     findings_text = []
     for sq in plan.subquestions:
@@ -58,6 +59,8 @@ def writer_messages(
         f"- Stay under {max_words} words. Tables are allowed where they help comparison.\n"
         f"Today's date is {today()}. {DATA_GUARD}"
     )
+    if memory:
+        system += "\n\n" + memory
     user = (
         f"Research question: {question[:2000]}\n\nMethod used: {method_note}\n\n"
         f"Findings by subquestion:\n\n" + "\n\n".join(findings_text) + f"\n\nAvailable sources:\n{sources}"

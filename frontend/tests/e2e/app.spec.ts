@@ -119,6 +119,56 @@ test('documents: upload PDF and ask about it', async ({ page }) => {
   await expect(page.getByText('Here is a mocked answer to:')).toBeVisible()
 })
 
+test('memory: learned from chat, used in later chats, editable', async ({ page }) => {
+  await page.goto('/#/memory')
+  await expect(page.getByRole('heading', { name: 'Memory' })).toBeVisible()
+  const clearAll = page.getByRole('button', { name: 'Clear all memories' })
+  await expect(page.getByText('No memories yet.').or(clearAll)).toBeVisible()
+  if (await clearAll.isVisible()) {
+    await clearAll.click()
+    await page.getByRole('button', { name: 'Clear all', exact: true }).click()
+  }
+  await expect(page.getByText('No memories yet.')).toBeVisible()
+
+  await page.goto('/')
+  await send(page, 'I am a marine biologist. What is krill?')
+  await expect(page.getByText('Here is a mocked answer to:')).toBeVisible()
+
+  // Learning runs in the background after the answer, so reload until it shows up.
+  await page.goto('/#/memory')
+  await expect(async () => {
+    await page.reload()
+    await expect(page.getByText('The user is a marine biologist.')).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 10_000 })
+  await expect(page.getByText('Learned from a conversation')).toBeVisible()
+
+  await page.getByLabel('New memory', { exact: true }).fill('I prefer answers with tables')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByText('I prefer answers with tables')).toBeVisible()
+  await expect(page.getByText('Added by you')).toBeVisible()
+  await shot(page, 'desktop-memory-dark')
+
+  await page.getByRole('button', { name: 'Edit memory: The user is a marine biologist.' }).click()
+  await page.getByLabel('Edit memory', { exact: true }).fill('The user is an ocean scientist.')
+  await page.getByRole('button', { name: 'Save memory' }).click()
+  await expect(page.getByText('The user is an ocean scientist.')).toBeVisible()
+
+  // A new conversation is personalized with both memories, and they survive a reload.
+  await page.goto('/')
+  await send(page, 'Tell me about whales')
+  await expect(page.getByText('Personalized with 2 saved memories.')).toBeVisible()
+  await page.goto('/#/memory')
+  await page.reload()
+  await expect(page.getByText('The user is an ocean scientist.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete memory: I prefer answers with tables' }).click()
+  await expect(page.getByText('I prefer answers with tables')).toHaveCount(0)
+  await page.getByRole('checkbox', { name: /Learn automatically/ }).uncheck()
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: /Learn automatically/ })).not.toBeChecked()
+  await page.getByRole('checkbox', { name: /Learn automatically/ }).check()
+})
+
 test('settings: status and connection test', async ({ page }) => {
   await page.goto('/#/settings')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()

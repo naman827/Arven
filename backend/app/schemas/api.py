@@ -113,3 +113,25 @@ class DocumentOut(ORM):
     has_text: bool
     status: str
     created_at: datetime
+
+
+class MemoryOut(ORM):
+    id: str
+    content: str
+    source: str
+    conversation_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MemoryIn(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+
+
+class MemoryList(BaseModel):
+    auto_learn: bool
+    memories: list[MemoryOut]
+
+
+class MemorySettingsIn(BaseModel):
+    auto_learn: bool

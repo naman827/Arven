@@ -8,6 +8,10 @@ A local AI research workspace with three modes:
 - **Research**: one search round, up to 8 sources read, answer with numbered citations that map to real retrieved sources.
 - **Deep Research**: plan (optionally reviewed by you), multiple search rounds with gap and conflict follow-ups, source reading, per-subquestion analysis, a streamed draft, and a verifier pass that removes uncited or unsupported claims. Produces a report with a references section and PDF export.
 
+Conversations in all three modes are saved: the sidebar lists, searches, reopens, renames and deletes them.
+
+**Memory** (sidebar > Memory): facts and preferences about you that are added to the prompts of all three modes. When "Learn automatically" is on, a user message that talks about you ("I am a nurse", "keep answers short", "remember that...") is sent to the model in the background to extract durable memories; ordinary questions are not. Only your own messages are used, never web pages or documents. You can add, edit, delete or clear memories. There is one memory store for the workspace, shared by everyone who signs in with the access password. At most 100 are kept; the oldest automatic ones are dropped first.
+
 Gemini is the primary model. When Gemini fails (quota, rate limit, auth, outage, bad output) the router falls back to NVIDIA automatically, and the UI shows which provider answered. Search uses Tavily with a best-effort DuckDuckGo fallback.
 
 Everything runs on your machine: FastAPI on `127.0.0.1:8000`, Vite on `127.0.0.1:5173`, SQLite in `data/`. API keys stay in `.env` on the backend and are never sent to the browser.
@@ -174,7 +178,8 @@ Netlify serves the static frontend. The FastAPI backend needs a long-running Pyt
 
 Notes:
 - Keys live only in Render's environment settings, never in the frontend build.
-- On Render's free plan the service sleeps when idle (the first request takes a while) and the disk is not persistent, so chat history, uploads and reports are lost on restart or redeploy. To keep them, use a paid instance with a persistent disk and point `DATA_DIR` and `DATABASE_URL` (absolute `sqlite:////path/arven_ai.db`) at it.
+- `render.yaml` uses the smallest paid instance (`0.5c-512mb`) with a 1 GB persistent disk mounted at `/var/data`, and points `DATA_DIR` and `DATABASE_URL` (`sqlite:////var/data/arven_ai.db`) at it, so chat history, memories, uploads and reports survive restarts and redeploys. Render's free plan cannot attach a disk: if you switch `plan` back to `free` (and remove `disk`), everything in the database is lost on every restart or redeploy, and the service sleeps when idle.
+- A service with a disk runs as a single instance and has a short downtime during each deploy. The disk can be grown later but not shrunk.
 - Changing `ACCESS_PASSWORD` signs out every browser.
 
 ## Project layout
@@ -182,7 +187,7 @@ Notes:
 ```
 backend/
   app/
-    api/             FastAPI routers (chat SSE, research jobs, documents, reports, settings)
+    api/             FastAPI routers (chat SSE, research jobs, documents, reports, memory, settings)
     db/              SQLAlchemy models and session
     services/
       providers/     Gemini, NVIDIA, circuit breaker, fallback router
@@ -192,7 +197,7 @@ backend/
       reports/       ReportLab PDF export
   tests/             pytest suites and the E2E fake server
 frontend/
-  src/               React app (features/chat, research, reports, documents, settings)
+  src/               React app (features/chat, research, reports, documents, memory, settings)
   tests/unit/        Vitest
   tests/e2e/         Playwright
 docs/screenshots/    UI screenshots from the E2E run

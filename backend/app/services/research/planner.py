@@ -6,7 +6,7 @@ from app.services.research.prompts import DATA_GUARD, today
 from app.services.research.schemas import QuerySet, ResearchPlan, SubQuestion
 
 
-async def make_plan(router: ProviderRouter, question: str, *, focus: str = "general") -> ResearchPlan:
+async def make_plan(router: ProviderRouter, question: str, *, focus: str = "general", memory: str = "") -> ResearchPlan:
     focus_note = (
         "Academic focus: favor peer-reviewed papers, institutions, and DOIs; note preprints separately."
         if focus == "academic"
@@ -18,7 +18,7 @@ async def make_plan(router: ProviderRouter, question: str, *, focus: str = "gene
             "You are the planning step of a deep research system. Break the user's question into 3-7 distinct, "
             "non-overlapping subquestions that together answer it. For each, state what evidence would answer it. "
             f"List claims that are time-sensitive (may have changed recently). Today's date is {today()}. "
-            f"{focus_note} {DATA_GUARD}",
+            f"{focus_note} {DATA_GUARD}" + (f"\n\n{memory}" if memory else ""),
         ),
         ChatMessage("user", f"Research question:\n{question[:4000]}"),
     ]

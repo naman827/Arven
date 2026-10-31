@@ -87,8 +87,11 @@ async def run_chat(
     history: list[tuple[str, str]],
     docs: list[DocContext],
     result: TurnResult,
+    memory: str = "",
 ) -> AsyncIterator[dict[str, Any]]:
     system = CHAT_SYSTEM.format(date=today())
+    if memory:
+        system += "\n\n" + memory
     context, _ = document_context(question, docs)
     if context:
         system += "\n\n" + context
@@ -108,6 +111,7 @@ async def run_research(
     history: list[tuple[str, str]],
     docs: list[DocContext],
     result: TurnResult,
+    memory: str = "",
 ) -> AsyncIterator[dict[str, Any]]:
     if not search.available:
         result.error = "Web research is unavailable: no working search provider. Add TAVILY_API_KEY to .env and restart the backend. Chat mode still works."
@@ -159,6 +163,8 @@ async def run_research(
             data_block(f"[{r.number}] {r.result.title} ({r.result.domain})", "\n...\n".join(r.passages), limit=2400) for r in readable
         )
         system = RESEARCH_ANSWER_SYSTEM.format(date=today())
+        if memory:
+            system += "\n\n" + memory
         context, _ = document_context(question, docs)
         if context:
             system += "\n\n" + context

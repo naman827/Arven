@@ -4,8 +4,15 @@ services:
   - type: web
     name: arven-api
     runtime: python
-    plan: free
+    # Persistent disks need a paid instance; the free plan wipes the disk (chats, memories, uploads) on every
+    # restart or redeploy. 0.5c-512mb is the smallest paid instance type.
+    plan: 0.5c-512mb
     rootDir: backend
+    # Only data written under mountPath survives deploys and restarts, so DATA_DIR and DATABASE_URL point here.
+    disk:
+      name: arven-data
+      mountPath: /var/data
+      sizeGB: 1
     buildCommand: pip install -r requirements.txt
     startCommand: python -m app
     healthCheckPath: /api/health
@@ -17,6 +24,11 @@ services:
       # Public server behind ACCESS_PASSWORD: any Host header is fine (DNS-rebinding protection is for localhost).
       - key: ALLOWED_HOSTS
         value: "*"
+      - key: DATA_DIR
+        value: /var/data
+      # Four slashes: sqlite:/// plus the absolute path /var/data/arven_ai.db
+      - key: DATABASE_URL
+        value: sqlite:////var/data/arven_ai.db
       # Required, at least 12 characters. The app refuses to start on 0.0.0.0 without it.
       - key: ACCESS_PASSWORD
         sync: false

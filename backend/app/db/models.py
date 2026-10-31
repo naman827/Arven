@@ -149,3 +149,26 @@ class Report(Base):
     verification: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class Memory(Base):
+    """A durable fact or preference about the user, shared by the whole workspace."""
+
+    __tablename__ = "memories"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    content: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # "manual" or "auto"
+    # Plain column, not a foreign key: a memory outlives the conversation it was learned in.
+    conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, onupdate=utcnow)
+
+
+class AppSetting(Base):
+    """Small key/value store for user-changeable settings that must survive restarts."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

@@ -1,4 +1,4 @@
-import { FileText, FolderOpen, MessageSquarePlus, Moon, MoreHorizontal, PanelLeftClose, Pencil, Search, Settings, Sun, Trash2 } from 'lucide-react'
+import { Brain, FileText, FolderOpen, MessageSquarePlus, Moon, MoreHorizontal, PanelLeftClose, Pencil, Search, Settings, Sun, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { ProviderBadge } from '@/components/ProviderBadge'
@@ -140,6 +140,7 @@ export function Sidebar({ onClose, theme, onToggleTheme }: { onClose: () => void
       <div className="space-y-1 border-t border-border p-2">
         <NavItem icon={<FileText />} label="Reports" active={route.view === 'reports' || route.view === 'report'} onClick={() => go({ view: 'reports' })} />
         <NavItem icon={<FolderOpen />} label="Documents" active={route.view === 'documents'} onClick={() => go({ view: 'documents' })} />
+        <NavItem icon={<Brain />} label="Memory" active={route.view === 'memory'} onClick={() => go({ view: 'memory' })} />
         <NavItem icon={<Settings />} label="Settings" active={route.view === 'settings'} onClick={() => go({ view: 'settings' })} />
         <div className="flex items-center justify-between gap-2 rounded-md px-2 pt-2 pb-1">
           <button onClick={() => go({ view: 'settings' })} className="min-w-0 rounded text-left" aria-label="Provider status, open settings">

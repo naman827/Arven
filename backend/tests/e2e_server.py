@@ -4,7 +4,9 @@ No real API calls are made. Run from backend/:  python -m tests.e2e_server  (lis
 """
 
 import asyncio
+import json
 import os
+import re
 import tempfile
 
 import uvicorn
@@ -29,11 +31,16 @@ from tests.conftest import FakeProvider, FakeSearchProvider, research_handler  #
 
 def handler(messages, json_mode):  # type: ignore[no-untyped-def]
     system = messages[0].content if messages else ""
+    if "memory extraction step" in system:
+        found = re.search(r"I am an? ([a-z ]{3,40}?)[.,]", messages[1].content)
+        return json.dumps({"memories": [f"The user is a {found.group(1)}."] if found else []})
     if "careful research assistant" in system:  # Chat mode
         question = messages[-1].content
+        memories = re.findall(r"(?m)^- (.+)$", system.split("<user_memories>")[1]) if "<user_memories>" in system else []
         return (
             f"Here is a mocked answer to: **{question[:80]}**\n\n"
-            "- Point one with `inline code`\n- Point two\n\n| Column | Value |\n|---|---|\n| A | 1 |\n\n"
+            + (f"Personalized with {len(memories)} saved memories.\n\n" if memories else "")
+            + "- Point one with `inline code`\n- Point two\n\n| Column | Value |\n|---|---|\n| A | 1 |\n\n"
             "```python\nprint('hello from ARVEN')\n```"
         )
     return research_handler(messages, json_mode)

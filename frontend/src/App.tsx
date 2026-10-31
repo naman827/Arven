@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 const ReportsList = lazy(() => import('@/features/reports/ReportView').then((m) => ({ default: m.ReportsList })))
 const ReportView = lazy(() => import('@/features/reports/ReportView').then((m) => ({ default: m.ReportView })))
 const DocumentsView = lazy(() => import('@/features/documents/DocumentsView').then((m) => ({ default: m.DocumentsView })))
+const MemoryView = lazy(() => import('@/features/memory/MemoryView').then((m) => ({ default: m.MemoryView })))
 const SettingsView = lazy(() => import('@/features/settings/SettingsView').then((m) => ({ default: m.SettingsView })))
 
 const isWide = () => window.innerWidth >= 1024
@@ -65,6 +66,7 @@ export default function App() {
                   {route.view === 'reports' ? <ReportsList /> : null}
                   {route.view === 'report' ? <ReportView id={route.id} /> : null}
                   {route.view === 'documents' ? <DocumentsView /> : null}
+                  {route.view === 'memory' ? <MemoryView /> : null}
                   {route.view === 'settings' ? <SettingsView /> : null}
                 </Suspense>
               </main>
