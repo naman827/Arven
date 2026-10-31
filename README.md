@@ -1,5 +1,7 @@
 # ARVEN AI
 
+**Live:** https://arven-research.netlify.app/
+
 A local AI research workspace with three modes:
 
 - **Chat**: streaming conversation with optional PDF context. No web access.
